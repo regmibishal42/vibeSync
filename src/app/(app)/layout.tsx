@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 
+import { signOut } from "@/app/(app)/actions";
 import { AppHeader } from "@/components/nav/app-header";
 import { BottomNav } from "@/components/nav/bottom-nav";
 import { FabQuickLog } from "@/components/nav/fab-quick-log";
@@ -18,12 +19,26 @@ export default async function AppShellLayout({
   // normal unauthenticated visitor. A plain redirect("/login") would bounce
   // right back here: proxy.ts sends any authenticated session away from
   // /login and back to "/", which loops forever since the profile is still
-  // missing. Sign the session out first so the next request is genuinely
-  // unauthenticated and the redirect actually lands on /login.
+  // missing. Since Server Components cannot clear cookies (and thus signing out
+  // here fails), we render an unprovisioned state with a Server Action sign out
+  // button to avoid an infinite redirect loop.
   if (!profile) {
-    const supabase = await createClient();
-    await supabase.auth.signOut();
-    redirect("/login");
+    return (
+      <div className="flex min-h-svh flex-col items-center justify-center p-4 text-center">
+        <h1 className="text-xl font-bold">Account not provisioned</h1>
+        <p className="text-muted-foreground mt-2 mb-6 max-w-sm">
+          Your account exists but hasn't been set up with a profile yet. Please run the seed script or contact your administrator.
+        </p>
+        <form action={signOut}>
+          <button
+            type="submit"
+            className="bg-primary text-primary-foreground rounded-xl px-6 py-3 font-medium transition-opacity hover:opacity-90"
+          >
+            Sign out
+          </button>
+        </form>
+      </div>
+    );
   }
 
   return (
