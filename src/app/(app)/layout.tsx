@@ -4,6 +4,7 @@ import { AppHeader } from "@/components/nav/app-header";
 import { BottomNav } from "@/components/nav/bottom-nav";
 import { FabQuickLog } from "@/components/nav/fab-quick-log";
 import { getCurrentProfile } from "@/lib/supabase/profile";
+import { createClient } from "@/lib/supabase/server";
 
 export default async function AppShellLayout({
   children,
@@ -14,9 +15,14 @@ export default async function AppShellLayout({
 
   // Proxy guarantees a session exists here — a missing profile means the two
   // seed accounts haven't been provisioned yet (see scripts/seed.ts), not a
-  // normal unauthenticated visitor, so send them back to /login rather than
-  // rendering a broken dashboard.
+  // normal unauthenticated visitor. A plain redirect("/login") would bounce
+  // right back here: proxy.ts sends any authenticated session away from
+  // /login and back to "/", which loops forever since the profile is still
+  // missing. Sign the session out first so the next request is genuinely
+  // unauthenticated and the redirect actually lands on /login.
   if (!profile) {
+    const supabase = await createClient();
+    await supabase.auth.signOut();
     redirect("/login");
   }
 
