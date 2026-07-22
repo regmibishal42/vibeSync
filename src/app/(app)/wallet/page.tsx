@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { Wallet, TrendingDown, TrendingUp } from "lucide-react";
 
 import { createClient } from "@/lib/supabase/server";
-import { getCurrentProfile } from "@/lib/supabase/profile";
+import { getCurrentProfile, getCurrentUser } from "@/lib/supabase/profile";
 import { StatCard } from "@/components/dashboard/stat-card";
 import { AccountCard } from "@/components/wallet/account-card";
 import { AccountForm } from "@/components/wallet/account-form";
@@ -25,14 +25,11 @@ export default async function WalletPage({
   searchParams: Promise<{ quick?: string }>;
 }) {
   const { quick } = await searchParams;
-  const [profile, supabase] = await Promise.all([
+  const [profile, user, supabase] = await Promise.all([
     getCurrentProfile(),
+    getCurrentUser(),
     createClient(),
   ]);
-
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
 
   const [{ data: accountsData }, { data: transactionsData }, { data: profilesData }] =
     await Promise.all([

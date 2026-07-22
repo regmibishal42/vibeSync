@@ -20,11 +20,7 @@ import {
   SECONDARY_SHIFT_DEFAULT_RATE,
   calculateSecondaryShiftPay,
 } from "@/lib/calculations/shift-pay";
-import { formatCurrency } from "@/lib/format";
-
-function todayISO() {
-  return new Date().toISOString().slice(0, 10);
-}
+import { formatCurrency, todayLocalISO } from "@/lib/format";
 
 export function SecondaryShiftForm() {
   const [open, setOpen] = useState(false);
@@ -73,8 +69,8 @@ export function SecondaryShiftForm() {
               id="secondary-date"
               name="shiftDate"
               type="date"
-              defaultValue={todayISO()}
-              max={todayISO()}
+              defaultValue={todayLocalISO()}
+              max={todayLocalISO()}
             />
           </div>
 

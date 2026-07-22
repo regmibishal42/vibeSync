@@ -19,16 +19,12 @@ import {
   calculateHotelShiftPay,
   sumRoomCredits,
 } from "@/lib/calculations/shift-pay";
-import { formatCurrency } from "@/lib/format";
+import { formatCurrency, todayLocalISO } from "@/lib/format";
 import type { RoomDetail } from "@/lib/types/database.types";
-
-function todayISO() {
-  return new Date().toISOString().slice(0, 10);
-}
 
 export function HotelShiftForm({ defaultOpen = false }: { defaultOpen?: boolean }) {
   const [open, setOpen] = useState(defaultOpen);
-  const [shiftDate, setShiftDate] = useState(todayISO());
+  const [shiftDate, setShiftDate] = useState(todayLocalISO());
   const [rooms, setRooms] = useState<RoomDetail[]>([{ room: "", credits: 1 }]);
   const [error, setError] = useState<string | undefined>();
   const [isPending, startTransition] = useTransition();
@@ -62,7 +58,7 @@ export function HotelShiftForm({ defaultOpen = false }: { defaultOpen?: boolean 
       }
       setError(undefined);
       setRooms([{ room: "", credits: 1 }]);
-      setShiftDate(todayISO());
+      setShiftDate(todayLocalISO());
       handleOpenChange(false);
       router.refresh();
     });
@@ -98,7 +94,7 @@ export function HotelShiftForm({ defaultOpen = false }: { defaultOpen?: boolean 
               type="date"
               value={shiftDate}
               onChange={(e) => setShiftDate(e.target.value)}
-              max={todayISO()}
+              max={todayLocalISO()}
             />
           </div>
 

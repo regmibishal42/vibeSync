@@ -17,6 +17,7 @@ import {
   type ChartConfig,
 } from "@/components/ui/chart";
 import type { Database } from "@/lib/types/database.types";
+import { toLocalDateKey } from "@/lib/format";
 
 type GymLog = Database["public"]["Tables"]["gym_logs"]["Row"];
 type Exercise = Database["public"]["Tables"]["gym_exercises"]["Row"];
@@ -50,7 +51,7 @@ export function ProgressiveOverloadChart({
     logs
       .filter((l) => l.exercise_id === selectedId)
       .forEach((l) => {
-        const day = l.logged_at.slice(0, 10);
+        const day = toLocalDateKey(new Date(l.logged_at));
         byDay.set(day, Math.max(byDay.get(day) ?? 0, l.weight_kg));
       });
 

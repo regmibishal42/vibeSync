@@ -24,6 +24,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import type { Database } from "@/lib/types/database.types";
+import { todayLocalISO } from "@/lib/format";
 
 type Account = Database["public"]["Tables"]["accounts"]["Row"];
 type TxType = "EXPENSE" | "DEPOSIT" | "TRANSFER";
@@ -38,10 +39,6 @@ const CATEGORIES = [
   "Health",
   "Shopping",
 ];
-
-function todayISO() {
-  return new Date().toISOString().slice(0, 10);
-}
 
 export function TransactionForm({
   accounts,
@@ -98,7 +95,7 @@ export function TransactionForm({
           <input
             type="hidden"
             name="transactionDate"
-            value={todayISO()}
+            value={todayLocalISO()}
           />
 
           <Tabs value={type} onValueChange={(v) => setType(v as TxType)}>

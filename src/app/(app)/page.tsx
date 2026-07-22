@@ -8,7 +8,7 @@ import {
 } from "lucide-react";
 
 import { createClient } from "@/lib/supabase/server";
-import { getCurrentProfile } from "@/lib/supabase/profile";
+import { getCurrentProfile, getCurrentUser } from "@/lib/supabase/profile";
 import { StatCard } from "@/components/dashboard/stat-card";
 import { formatCurrency } from "@/lib/format";
 
@@ -33,11 +33,11 @@ function greeting() {
 }
 
 export default async function HomePage() {
-  const profile = await getCurrentProfile();
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const [profile, user, supabase] = await Promise.all([
+    getCurrentProfile(),
+    getCurrentUser(),
+    createClient(),
+  ]);
 
   const [
     { data: accounts },

@@ -133,7 +133,7 @@ export default async function WorkPage({
         <EarningsChart data={chartData} />
       </div>
 
-      <Tabs defaultValue={quick === "hotel" ? "hotel" : "hotel"}>
+      <Tabs defaultValue="hotel">
         <TabsList className="w-full">
           <TabsTrigger value="hotel" className="flex-1">
             Hotel
