@@ -34,7 +34,7 @@ export default async function AppShellLayout({
             type="submit"
             className="bg-primary text-primary-foreground rounded-xl px-6 py-3 font-medium transition-opacity hover:opacity-90"
           >
-            Sign out
+            Sign Out
           </button>
         </form>
       </div>
