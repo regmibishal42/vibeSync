@@ -57,7 +57,6 @@ export function LoginForm() {
             required
           />
         </div>
-        
       </div>
 
       {state.error ? (
