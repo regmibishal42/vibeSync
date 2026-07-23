@@ -1,23 +1,10 @@
-import { Banknote, CreditCard, Wallet as WalletIcon } from "lucide-react";
-
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { formatCurrency } from "@/lib/format";
+import { ACCOUNT_TYPE_ICON, ACCOUNT_TYPE_LABEL } from "@/lib/wallet/account-type";
 import type { Database } from "@/lib/types/database.types";
 
 type Account = Database["public"]["Tables"]["accounts"]["Row"];
-
-const TYPE_ICON = {
-  DIGITAL_WALLET: WalletIcon,
-  BANK: Banknote,
-  CASH: CreditCard,
-} as const;
-
-const TYPE_LABEL = {
-  DIGITAL_WALLET: "Digital wallet",
-  BANK: "Bank",
-  CASH: "Cash",
-} as const;
 
 export function AccountCard({
   account,
@@ -26,7 +13,7 @@ export function AccountCard({
   account: Account;
   currency: string;
 }) {
-  const Icon = TYPE_ICON[account.account_type];
+  const Icon = ACCOUNT_TYPE_ICON[account.account_type];
 
   return (
     <Card className="gap-3 py-4">
@@ -38,7 +25,7 @@ export function AccountCard({
           <div className="flex flex-col">
             <span className="font-medium">{account.account_name}</span>
             <span className="text-muted-foreground text-xs">
-              {TYPE_LABEL[account.account_type]}
+              {ACCOUNT_TYPE_LABEL[account.account_type]}
               {account.is_parent_account ? " · Parent" : ""}
             </span>
           </div>

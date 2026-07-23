@@ -6,6 +6,12 @@ const ROOT = path.resolve(import.meta.dirname, "..");
 const SRC_SVG = path.join(ROOT, "public/icons/icon-mark.svg");
 const OUT_DIR = path.join(ROOT, "public/icons");
 
+// Must match --primary / icon-mark.svg's own backplate <rect> fill — kept as
+// one named constant (rather than parsing globals.css's CSS custom property
+// from this build script) since that's the pragmatic single source of truth
+// available to a plain Node script.
+const ICON_BG = "#b8431a";
+
 // Sizes required across manifest icons, apple-touch-icon, and favicon.
 // Kept to the minimum set that covers iOS/Android home-screen + tab icon
 // needs — every PNG here is a few KB, well within the <1MB asset budget.
@@ -35,7 +41,7 @@ async function main() {
           bottom: padded,
           left: padded,
           right: padded,
-          background: "#09090b",
+          background: ICON_BG,
         })
         .png()
         .toBuffer();

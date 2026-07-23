@@ -4,53 +4,64 @@
 @custom-variant dark (&:is(.dark *));
 
 :root {
-  --radius: 0.85rem;
+  --radius: 1.1rem;
 
-  /* Base surface — near-black with a faint violet cast, not pure #000 */
-  --background: oklch(0.145 0.008 285);
-  --foreground: oklch(0.96 0.005 285);
+  /* Base surface — warm cream, not stark white. Every base token shares a
+     narrow warm hue family (H≈38-60) so the shell reads as "one warm
+     material," the way Pinterest's cream canvas does, rather than a neutral
+     gray UI with warm accents dropped on top. */
+  --background: oklch(0.97 0.015 60);
+  --foreground: oklch(0.27 0.02 40);
 
-  --card: oklch(0.19 0.012 285);
-  --card-foreground: oklch(0.96 0.005 285);
+  /* Card sits a hair lighter than background — surfaces "float" on the
+     canvas instead of just being outlined. */
+  --card: oklch(0.985 0.006 60);
+  --card-foreground: oklch(0.27 0.02 40);
 
-  --popover: oklch(0.19 0.012 285);
-  --popover-foreground: oklch(0.96 0.005 285);
+  --popover: oklch(0.985 0.006 60);
+  --popover-foreground: oklch(0.27 0.02 40);
 
-  --primary: oklch(0.7 0.14 290);
-  --primary-foreground: oklch(0.145 0.008 285);
+  /* Terracotta/rust — deliberately shifted ~15° warmer and lower-chroma than
+     Pinterest's own brand red (H≈20-25) so this reads as its own identity,
+     not a reskin. */
+  --primary: oklch(0.54 0.16 38);
+  --primary-foreground: oklch(0.98 0.012 60);
 
-  --secondary: oklch(0.26 0.015 285);
-  --secondary-foreground: oklch(0.96 0.005 285);
+  --secondary: oklch(0.91 0.03 50);
+  --secondary-foreground: oklch(0.32 0.03 40);
 
-  --muted: oklch(0.24 0.012 285);
-  --muted-foreground: oklch(0.65 0.02 285);
+  --muted: oklch(0.94 0.02 55);
+  --muted-foreground: oklch(0.52 0.025 45);
 
-  --accent: oklch(0.28 0.02 285);
-  --accent-foreground: oklch(0.96 0.005 285);
+  --accent: oklch(0.9 0.035 45);
+  --accent-foreground: oklch(0.3 0.03 40);
 
-  --destructive: oklch(0.64 0.21 25);
-  --destructive-foreground: oklch(0.98 0.005 285);
+  /* 16° away from --primary so an alert never reads as "just primary." */
+  --destructive: oklch(0.55 0.2 22);
+  --destructive-foreground: oklch(0.98 0.012 60);
 
-  --border: oklch(1 0 0 / 10%);
-  --input: oklch(1 0 0 / 14%);
-  --ring: oklch(0.7 0.14 290);
+  --border: oklch(0.42 0.04 40 / 12%);
+  --input: oklch(0.42 0.04 40 / 18%);
+  --ring: oklch(0.54 0.16 38);
 
-  /* Module accents — hexes chosen via the dataviz skill's CVD validator
-     (scripts/validate_palette.js), not eyeballed. This exact 5-hue order
-     clears CVD-separation and normal-vision floors as a set; reordering
-     invalidates that guarantee. */
-  --finance: #059669; /* emerald — income / wallet */
-  --finance-foreground: oklch(0.99 0.01 155);
-  --fitness: #c026d3; /* magenta-purple — gym */
-  --fitness-foreground: oklch(0.99 0.01 300);
-  --shift: #6366f1; /* indigo — work / shifts */
-  --shift-foreground: oklch(0.99 0.01 265);
-  --warning: #d97706; /* amber — pending payouts */
-  --warning-foreground: oklch(0.99 0.01 70);
+  /* Module accents — re-derived (not re-tinted) for the warm palette, then
+     verified for CVD-safe separation as a set (protanopia/deuteranopia/
+     tritanopia simulation, worst-case pairwise separation). Placed at
+     uneven-but-wide hue spacing (H75/145/265/350) with deliberate lightness
+     separation between finance and warning specifically, since green+amber
+     is the hardest confusion pair for red-green CVD. */
+  --finance: oklch(0.38 0.09 145); /* deep pine — income / wallet */
+  --finance-foreground: oklch(0.98 0.01 145);
+  --fitness: oklch(0.48 0.17 350); /* garnet/berry — gym */
+  --fitness-foreground: oklch(0.98 0.01 350);
+  --shift: oklch(0.48 0.13 265); /* deepened sapphire — work / shifts */
+  --shift-foreground: oklch(0.98 0.01 265);
+  --warning: oklch(0.58 0.12 75); /* warm ochre/gold — pending payouts */
+  --warning-foreground: oklch(0.18 0.02 75);
 
   --chart-1: var(--finance);
   --chart-2: var(--shift);
-  --chart-3: #ef4444;
+  --chart-3: oklch(0.55 0.1 320); /* dusty mauve — 5th categorical hue */
   --chart-4: var(--fitness);
   --chart-5: var(--warning);
 }
@@ -98,6 +109,16 @@
 
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
+
+  /* Warm-tinted shadow overrides — Tailwind's stock shadow-* utilities are
+     neutral gray, invisible on the old near-black theme but visibly cold
+     against warm cream. Defined directly in the theme namespace (shadows
+     have no --shadow-color-* indirection the way color tokens do) so every
+     shadow-xs/sm/md/lg usage picks these up with zero per-component edits. */
+  --shadow-xs: 0 1px 2px 0 oklch(0.27 0.02 40 / 5%);
+  --shadow-sm: 0 1px 3px 0 oklch(0.27 0.02 40 / 8%), 0 1px 2px -1px oklch(0.27 0.02 40 / 6%);
+  --shadow-md: 0 4px 8px -2px oklch(0.27 0.02 40 / 10%), 0 2px 4px -2px oklch(0.27 0.02 40 / 6%);
+  --shadow-lg: 0 12px 24px -6px oklch(0.27 0.02 40 / 14%), 0 4px 8px -4px oklch(0.27 0.02 40 / 8%);
 }
 
 @layer base {
@@ -105,7 +126,7 @@
     @apply border-border outline-ring/50;
   }
   html {
-    color-scheme: dark;
+    color-scheme: light;
   }
   body {
     @apply bg-background text-foreground;
@@ -114,14 +135,23 @@
 }
 
 @layer utilities {
+  /* Soft warm "lifted paper" elevation instead of a saturated neon halo — a
+     colored glow reads garish on cream even though it worked on near-black.
+     Low-alpha color tint + a neutral warm ambient shadow underneath. */
   .glow-finance {
-    box-shadow: 0 0 32px -8px oklch(0.72 0.16 155 / 45%);
+    box-shadow:
+      0 10px 28px -10px oklch(0.38 0.09 145 / 30%),
+      0 2px 8px -2px oklch(0.27 0.02 40 / 12%);
   }
   .glow-fitness {
-    box-shadow: 0 0 32px -8px oklch(0.68 0.18 300 / 45%);
+    box-shadow:
+      0 10px 28px -10px oklch(0.48 0.17 350 / 28%),
+      0 2px 8px -2px oklch(0.27 0.02 40 / 12%);
   }
   .glow-shift {
-    box-shadow: 0 0 32px -8px oklch(0.62 0.17 265 / 45%);
+    box-shadow:
+      0 10px 28px -10px oklch(0.48 0.13 265 / 28%),
+      0 2px 8px -2px oklch(0.27 0.02 40 / 12%);
   }
   .no-scrollbar::-webkit-scrollbar {
     display: none;

@@ -24,12 +24,17 @@ query gym data even in principle.
 
 ## Stack
 
-- **Next.js 16** (App Router, Turbopack, Server Actions, React 19.2)
+- **Next.js 16** (App Router, Turbopack, Server Actions, React 19.2, **Cache
+  Components** — Partial Prerendering + `<Activity>`-based nav state, React
+  Compiler, native `<ViewTransition>`)
 - **Supabase** — Postgres + Auth + Row Level Security
-- **Tailwind CSS v4**, hand-authored shadcn/ui-style primitives (see [_why not the shadcn CLI_](#why-hand-authored-ui-components)), Lucide icons, Framer Motion
+- **Tailwind CSS v4**, hand-authored shadcn/ui-style primitives (see [_why not the shadcn CLI_](#why-hand-authored-ui-components)), Lucide icons
 - **Recharts**, themed through a shadcn-style `ChartContainer`
-- **TanStack Query v5** for client-side mutations/caching
 - **A hand-rolled service worker** for PWA support (see [_why not Serwist_](#why-a-hand-rolled-service-worker))
+
+All data fetching is Server Components + Server Actions + `revalidatePath` —
+there's no client-side data-fetching library (an earlier pass installed
+TanStack Query and never used it; removed as dead weight).
 
 ## Getting started
 
@@ -51,7 +56,7 @@ grab three values from **Project Settings → API**:
 ### 3. Run the migrations
 
 In the Supabase dashboard's **SQL Editor**, run each file in
-`supabase/migrations/` **in order** (`0001_...` through `0008_...`), or use
+`supabase/migrations/` **in order** (`0001_...` through `0010_...`), or use
 the Supabase CLI:
 
 ```bash
@@ -199,4 +204,22 @@ once you've completed steps 2–5 above:
 - That balances update immediately after logging a transaction, shift, or
   transfer
 - PWA install prompt and offline behavior on an actual phone
+- That `migrations/0009_expense_categories.sql` and `0010_recurring_bills.sql`
+  apply cleanly against a real project (only ever run against an empty
+  `transactions` table in this build)
+- `add_calendar_month()`'s month-overflow clamping — e.g.
+  `select public.add_calendar_month(date '2026-01-31');` should return
+  `2026-02-28`, not roll into March
+- "Mark paid" on a recurring bill: confirm it inserts one real transaction,
+  advances `next_due_date` by the right interval, and that a PARTNER can only
+  settle her own bills (RPC is `security invoker`)
+- CSV export (`/api/wallet/export`) ownership scoping — a PARTNER's export
+  should never include the ADMIN's rows, and `?scope=all` should only work
+  for the ADMIN
+- Browser due-date notifications: the permission prompt, and that a bill only
+  notifies once per local day (not on every page load)
+- Real Lighthouse scores and Cache Components' static-shell behavior against
+  the actual Vercel deployment — the streaming/PPR structure builds cleanly
+  here, but perceived speed depends on real network/Supabase latency this
+  sandbox can't reproduce
 # vibeSync

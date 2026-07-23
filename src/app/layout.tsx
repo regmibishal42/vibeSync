@@ -1,12 +1,15 @@
 import type { Metadata, Viewport } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import { Plus_Jakarta_Sans, Geist_Mono } from "next/font/google";
 import "./globals.css";
 
-import { QueryProvider } from "@/components/providers/query-provider";
 import { ServiceWorkerRegister } from "@/components/pwa/sw-register";
 import { Toaster } from "@/components/ui/sonner";
 
-const geistSans = Geist({
+// Warm geometric-humanist sans (soft curve terminals, still crisp tabular
+// figures for currency/reps) — replaces Geist Sans, which reads as a cold
+// engineering-tool grotesque wrong for a cozy identity. Keeps the
+// --font-geist-sans variable name so globals.css needs no edit beyond here.
+const geistSans = Plus_Jakarta_Sans({
   variable: "--font-geist-sans",
   subsets: ["latin"],
 });
@@ -34,7 +37,7 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  themeColor: "#09090b",
+  themeColor: "#fdf3eb",
   width: "device-width",
   initialScale: 1,
   maximumScale: 1,
@@ -49,13 +52,11 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={`dark ${geistSans.variable} ${geistMono.variable} h-full antialiased`}
+      className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col bg-background text-foreground">
-        <QueryProvider>
-          {children}
-          <Toaster />
-        </QueryProvider>
+        {children}
+        <Toaster />
         <ServiceWorkerRegister />
       </body>
     </html>

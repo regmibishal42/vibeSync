@@ -4,8 +4,11 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 
 import { createClient } from "@/lib/supabase/server";
+import { CATEGORY_ORDER } from "@/lib/wallet/categories";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import type { Database } from "@/lib/types/database.types";
+import type { Database, ExpenseCategory } from "@/lib/types/database.types";
+
+const categoryEnum = CATEGORY_ORDER as [ExpenseCategory, ...ExpenseCategory[]];
 
 type ActionResult = { error?: string; success?: boolean };
 
@@ -73,7 +76,7 @@ const expenseOrDepositSchema = z.object({
   type: z.enum(["EXPENSE", "DEPOSIT"]),
   accountId: z.string().uuid("Pick an account"),
   amount: z.coerce.number().positive("Must be greater than 0"),
-  category: z.string().optional(),
+  category: z.enum(categoryEnum).optional(),
   merchantOrItem: z.string().optional(),
   transactionDate: z.string().min(1),
 });

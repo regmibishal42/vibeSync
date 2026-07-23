@@ -23,22 +23,73 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import type { Database } from "@/lib/types/database.types";
+import type { Database, ExpenseCategory } from "@/lib/types/database.types";
 import { todayLocalISO } from "@/lib/format";
+import { ACCOUNT_TYPE_ICON } from "@/lib/wallet/account-type";
+import { CATEGORY_ORDER, CATEGORY_META } from "@/lib/wallet/categories";
+import {
+  useTransactionsOptimistic,
+  type OptimisticTransaction,
+} from "@/components/wallet/transactions-provider";
 
 type Account = Database["public"]["Tables"]["accounts"]["Row"];
 type TxType = "EXPENSE" | "DEPOSIT" | "TRANSFER";
 
-const CATEGORIES = [
-  "Groceries",
-  "Rent",
-  "Utilities",
-  "Supplements",
-  "Transport",
-  "Dining",
-  "Health",
-  "Shopping",
-];
+// Mirrors wallet/actions.ts's exact amount-signing logic (and the
+// "Transfer out"/"Transfer in" naming for transfers) so the optimistic row
+// renders identically to what the server will actually produce.
+function buildOptimisticAction(formData: FormData, accounts: Account[]) {
+  const type = formData.get("type") as TxType;
+  const amount = Number(formData.get("amount"));
+  const accountId = formData.get("accountId") as string;
+  const account = accounts.find((a) => a.id === accountId);
+  const base = {
+    created_at: new Date().toISOString(),
+    transaction_date: formData.get("transactionDate") as string,
+    _pending: true as const,
+  };
+
+  if (type === "TRANSFER") {
+    const destinationId = formData.get("destinationAccountId") as string;
+    const destination = accounts.find((a) => a.id === destinationId);
+
+    const out: OptimisticTransaction = {
+      ...base,
+      id: crypto.randomUUID(),
+      account_id: accountId,
+      user_id: account?.user_id ?? "",
+      amount: -Math.abs(amount),
+      type: "TRANSFER",
+      category: null,
+      merchant_or_item: "Transfer out",
+    };
+    const inbound: OptimisticTransaction = {
+      ...base,
+      id: crypto.randomUUID(),
+      account_id: destinationId,
+      user_id: destination?.user_id ?? "",
+      amount: Math.abs(amount),
+      type: "TRANSFER",
+      category: null,
+      merchant_or_item: "Transfer in",
+    };
+
+    return { type: "add-pair" as const, txs: [out, inbound] as [OptimisticTransaction, OptimisticTransaction] };
+  }
+
+  const tx: OptimisticTransaction = {
+    ...base,
+    id: crypto.randomUUID(),
+    account_id: accountId,
+    user_id: account?.user_id ?? "",
+    amount: type === "EXPENSE" ? -Math.abs(amount) : Math.abs(amount),
+    type,
+    category: (formData.get("category") as ExpenseCategory) || null,
+    merchant_or_item: (formData.get("merchantOrItem") as string) || null,
+  };
+
+  return { type: "add" as const, tx };
+}
 
 export function TransactionForm({
   accounts,
@@ -53,9 +104,11 @@ export function TransactionForm({
   const [destinationAccountId, setDestinationAccountId] = useState(
     accounts[1]?.id ?? accounts[0]?.id ?? ""
   );
+  const [category, setCategory] = useState<ExpenseCategory>("OTHER");
   const [error, setError] = useState<string | undefined>();
   const [isPending, startTransition] = useTransition();
   const router = useRouter();
+  const { addOptimistic } = useTransactionsOptimistic();
 
   function handleOpenChange(next: boolean) {
     setOpen(next);
@@ -63,7 +116,14 @@ export function TransactionForm({
   }
 
   function handleSubmit(formData: FormData) {
+    const optimisticAction = buildOptimisticAction(formData, accounts);
+
     startTransition(async () => {
+      // Shown instantly; reverts on its own once this transition settles
+      // (React 19's useOptimistic rollback) if createTransaction errors —
+      // no manual revert dispatch needed since we never touch base state.
+      addOptimistic(optimisticAction);
+
       const result = await createTransaction({}, formData);
       if (result.error) {
         setError(result.error);
@@ -113,17 +173,23 @@ export function TransactionForm({
           </Tabs>
 
           <div className="grid gap-2">
-            <Label>{type === "TRANSFER" ? "From account" : "Account"}</Label>
+            <Label>{type === "TRANSFER" ? "From account" : "Paid via"}</Label>
             <Select value={accountId} onValueChange={setAccountId}>
               <SelectTrigger>
                 <SelectValue placeholder="Select account" />
               </SelectTrigger>
               <SelectContent>
-                {accounts.map((a) => (
-                  <SelectItem key={a.id} value={a.id}>
-                    {a.account_name}
-                  </SelectItem>
-                ))}
+                {accounts.map((a) => {
+                  const AccountIcon = ACCOUNT_TYPE_ICON[a.account_type];
+                  return (
+                    <SelectItem key={a.id} value={a.id}>
+                      <span className="flex items-center gap-2">
+                        <AccountIcon className="size-3.5" />
+                        {a.account_name}
+                      </span>
+                    </SelectItem>
+                  );
+                })}
               </SelectContent>
             </Select>
           </div>
@@ -142,11 +208,17 @@ export function TransactionForm({
                 <SelectContent>
                   {accounts
                     .filter((a) => a.id !== accountId)
-                    .map((a) => (
-                      <SelectItem key={a.id} value={a.id}>
-                        {a.account_name}
-                      </SelectItem>
-                    ))}
+                    .map((a) => {
+                      const AccountIcon = ACCOUNT_TYPE_ICON[a.account_type];
+                      return (
+                        <SelectItem key={a.id} value={a.id}>
+                          <span className="flex items-center gap-2">
+                            <AccountIcon className="size-3.5" />
+                            {a.account_name}
+                          </span>
+                        </SelectItem>
+                      );
+                    })}
                 </SelectContent>
               </Select>
               <input
@@ -173,18 +245,29 @@ export function TransactionForm({
           {type !== "TRANSFER" ? (
             <>
               <div className="grid gap-2">
-                <Label htmlFor="category">Category</Label>
-                <Input
-                  id="category"
-                  name="category"
-                  list="categories"
-                  placeholder="Groceries, Rent, Supplements…"
-                />
-                <datalist id="categories">
-                  {CATEGORIES.map((c) => (
-                    <option key={c} value={c} />
-                  ))}
-                </datalist>
+                <Label>Category</Label>
+                <Select
+                  value={category}
+                  onValueChange={(v) => setCategory(v as ExpenseCategory)}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {CATEGORY_ORDER.map((c) => {
+                      const CategoryIcon = CATEGORY_META[c].icon;
+                      return (
+                        <SelectItem key={c} value={c}>
+                          <span className="flex items-center gap-2">
+                            <CategoryIcon className="size-3.5" />
+                            {CATEGORY_META[c].label}
+                          </span>
+                        </SelectItem>
+                      );
+                    })}
+                  </SelectContent>
+                </Select>
+                <input type="hidden" name="category" value={category} />
               </div>
               <div className="grid gap-2">
                 <Label htmlFor="merchant">Merchant / item</Label>

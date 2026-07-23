@@ -1,10 +1,14 @@
 import type { Metadata } from "next";
+import dynamic from "next/dynamic";
+import { Suspense } from "react";
 import { BedDouble, Clock, DollarSign, HandCoins } from "lucide-react";
 
-import { createClient } from "@/lib/supabase/server";
-import { getCurrentProfile } from "@/lib/supabase/profile";
+import { getWorkShiftsData, getPayoutBatchesData } from "@/app/(app)/work/data";
 import { formatCurrency } from "@/lib/format";
 import { StatCard } from "@/components/dashboard/stat-card";
+import { StatGridSkeleton } from "@/components/skeletons/stat-grid-skeleton";
+import { ChartSkeleton } from "@/components/skeletons/chart-skeleton";
+import { ListSkeleton } from "@/components/skeletons/list-skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { HotelShiftForm } from "@/components/work/hotel-shift-form";
 import { HotelShiftList } from "@/components/work/hotel-shift-list";
@@ -12,7 +16,11 @@ import { SecondaryShiftForm } from "@/components/work/secondary-shift-form";
 import { SecondaryShiftList } from "@/components/work/secondary-shift-list";
 import { PayoutBatchList } from "@/components/work/payout-batch-list";
 import { CreatePayoutBatchButton } from "@/components/work/create-payout-batch-button";
-import { EarningsChart } from "@/components/work/earnings-chart";
+
+const EarningsChart = dynamic(
+  () => import("@/components/work/earnings-chart").then((m) => m.EarningsChart),
+  { loading: () => <ChartSkeleton /> }
+);
 
 export const metadata: Metadata = { title: "Work / Shifts" };
 
@@ -22,39 +30,29 @@ function isThisMonth(dateISO: string) {
   return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
 }
 
-export default async function WorkPage({
+export default function WorkPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ quick?: string }>;
+}) {
+  return (
+    <div className="flex flex-col gap-6">
+      <h1 className="text-2xl font-semibold">Work / Shifts</h1>
+
+      <Suspense fallback={<WorkSummarySkeleton />}>
+        <WorkSummary searchParams={searchParams} />
+      </Suspense>
+    </div>
+  );
+}
+
+async function WorkSummary({
   searchParams,
 }: {
   searchParams: Promise<{ quick?: string }>;
 }) {
   const { quick } = await searchParams;
-  const [profile, supabase] = await Promise.all([
-    getCurrentProfile(),
-    createClient(),
-  ]);
-
-  const [{ data: hotelShifts }, { data: secondaryShifts }, { data: payoutBatches }] =
-    await Promise.all([
-      supabase
-        .from("hotel_shifts")
-        .select("*")
-        .order("shift_date", { ascending: false })
-        .limit(60),
-      supabase
-        .from("secondary_shifts")
-        .select("*")
-        .order("shift_date", { ascending: false })
-        .limit(60),
-      supabase
-        .from("payout_batches")
-        .select("*")
-        .order("paid_at", { ascending: false })
-        .limit(20),
-    ]);
-
-  const hotel = hotelShifts ?? [];
-  const secondary = secondaryShifts ?? [];
-  const batches = payoutBatches ?? [];
+  const { profile, hotel, secondary } = await getWorkShiftsData();
   const isPartner = profile?.role === "PARTNER";
 
   const monthHotel = hotel.filter((s) => isThisMonth(s.shift_date));
@@ -91,15 +89,12 @@ export default async function WorkPage({
   }));
 
   return (
-    <div className="flex flex-col gap-6">
-      <div>
-        <h1 className="text-2xl font-semibold">Work / Shifts</h1>
-        <p className="text-muted-foreground text-sm">
-          {isPartner
-            ? "This month across both jobs."
-            : "Read-only view of her shift income this month."}
-        </p>
-      </div>
+    <>
+      <p className="text-muted-foreground text-sm">
+        {isPartner
+          ? "This month across both jobs."
+          : "Read-only view of her shift income this month."}
+      </p>
 
       <div className="grid grid-cols-2 gap-3">
         <StatCard
@@ -157,12 +152,39 @@ export default async function WorkPage({
         </TabsContent>
 
         <TabsContent value="payouts" className="flex flex-col gap-3 pt-3">
-          {isPartner ? (
-            <CreatePayoutBatchButton pendingTotal={pendingSecondaryTotal} />
-          ) : null}
-          <PayoutBatchList batches={batches} />
+          <Suspense fallback={<ListSkeleton rows={2} />}>
+            <PayoutsPanel isPartner={isPartner} pendingTotal={pendingSecondaryTotal} />
+          </Suspense>
         </TabsContent>
       </Tabs>
+    </>
+  );
+}
+
+async function PayoutsPanel({
+  isPartner,
+  pendingTotal,
+}: {
+  isPartner: boolean;
+  pendingTotal: number;
+}) {
+  const batches = await getPayoutBatchesData();
+
+  return (
+    <>
+      {isPartner ? <CreatePayoutBatchButton pendingTotal={pendingTotal} /> : null}
+      <PayoutBatchList batches={batches} />
+    </>
+  );
+}
+
+function WorkSummarySkeleton() {
+  return (
+    <div className="flex flex-col gap-6">
+      <StatGridSkeleton count={4} columns={2} />
+      <ChartSkeleton />
+      <div className="bg-muted h-10 w-full animate-pulse rounded-lg" />
+      <ListSkeleton />
     </div>
   );
 }

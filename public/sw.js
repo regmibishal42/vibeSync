@@ -4,7 +4,14 @@
 // webpack-based PWA plugin injects), so bundler-driven SW generation isn't a
 // safe fit for this stack yet. A dependency-free SW also keeps the whole PWA
 // layer auditable in one file and adds zero bytes to the JS bundle.
-const CACHE_VERSION = "v1";
+//
+// CACHE_VERSION is stamped by scripts/inject-sw-version.ts (a `postbuild`
+// step, see package.json) with the actual Next.js build ID. SHELL_ASSETS
+// below use stable, non-hashed URLs (/offline.html, the manifest, two icon
+// PNGs) — without an auto-bumped version, a content change to any of those
+// across a deploy would never get evicted by `activate`'s cleanup below,
+// and a repeat visitor could be stuck on a stale offline page indefinitely.
+const CACHE_VERSION = "__CACHE_VERSION__";
 const SHELL_CACHE = `vibesync-shell-${CACHE_VERSION}`;
 const RUNTIME_CACHE = `vibesync-runtime-${CACHE_VERSION}`;
 
@@ -26,16 +33,22 @@ self.addEventListener("install", (event) => {
 
 self.addEventListener("activate", (event) => {
   event.waitUntil(
-    caches
-      .keys()
-      .then((keys) =>
-        Promise.all(
-          keys
-            .filter((key) => key !== SHELL_CACHE && key !== RUNTIME_CACHE)
-            .map((key) => caches.delete(key))
-        )
-      )
-      .then(() => self.clients.claim())
+    (async () => {
+      // Lets the browser start a navigation's network request in parallel
+      // with SW boot instead of waiting for the worker to finish starting
+      // up first — pure latency win, changes nothing about what's served
+      // (still always-network for navigations, see the fetch handler below).
+      if (self.registration.navigationPreload) {
+        await self.registration.navigationPreload.enable();
+      }
+      const keys = await caches.keys();
+      await Promise.all(
+        keys
+          .filter((key) => key !== SHELL_CACHE && key !== RUNTIME_CACHE)
+          .map((key) => caches.delete(key))
+      );
+      await self.clients.claim();
+    })()
   );
 });
 
@@ -63,9 +76,18 @@ self.addEventListener("fetch", (event) => {
   // App-shell navigations: network-first, offline fallback page on failure.
   // Deliberately not falling back to a cached page here — showing a stale
   // balance/shift screen while offline is worse than an explicit offline page.
+  // Prefers the navigation-preload response (started during SW boot, see
+  // the activate handler above) over issuing a second fetch.
   if (request.mode === "navigate") {
     event.respondWith(
-      fetch(request).catch(() => caches.match("/offline.html"))
+      (async () => {
+        try {
+          const preloaded = await event.preloadResponse;
+          return preloaded ?? (await fetch(request));
+        } catch {
+          return caches.match("/offline.html");
+        }
+      })()
     );
     return;
   }

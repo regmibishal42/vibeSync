@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import Link from "next/link";
 import {
   ArrowRight,
@@ -7,9 +8,16 @@ import {
   Wallet,
 } from "lucide-react";
 
-import { createClient } from "@/lib/supabase/server";
-import { getCurrentProfile, getCurrentUser } from "@/lib/supabase/profile";
+import {
+  getHomeAccountsData,
+  getHomeActivityData,
+  getHomeUpcomingBillsData,
+} from "@/app/(app)/data";
 import { StatCard } from "@/components/dashboard/stat-card";
+import { StatGridSkeleton } from "@/components/skeletons/stat-grid-skeleton";
+import { ListSkeleton } from "@/components/skeletons/list-skeleton";
+import { UpcomingBillsWidget } from "@/components/dashboard/upcoming-bills";
+import { BillNotifications } from "@/components/dashboard/bill-notifications";
 import { formatCurrency } from "@/lib/format";
 
 function isThisMonth(iso: string) {
@@ -32,52 +40,46 @@ function greeting() {
   return "Good evening";
 }
 
-export default async function HomePage() {
-  const [profile, user, supabase] = await Promise.all([
-    getCurrentProfile(),
-    getCurrentUser(),
-    createClient(),
-  ]);
+export default function HomePage() {
+  return (
+    <div className="flex flex-col gap-6">
+      <Suspense fallback={<HeroSkeleton />}>
+        <HomeHero />
+      </Suspense>
+      <Suspense fallback={<StatGridSkeleton count={2} columns={2} />}>
+        <HomeStats />
+      </Suspense>
+      <Suspense fallback={<ListSkeleton rows={2} />}>
+        <HomeBills />
+      </Suspense>
+      <Suspense fallback={<QuickLinksSkeleton />}>
+        <QuickLinks />
+      </Suspense>
+    </div>
+  );
+}
 
-  const [
-    { data: accounts },
-    { data: hotelShifts },
-    { data: secondaryShifts },
-    { data: gymLogs },
-  ] = await Promise.all([
-    supabase.from("accounts").select("*"),
-    supabase.from("hotel_shifts").select("*"),
-    supabase.from("secondary_shifts").select("*"),
-    supabase.from("gym_logs").select("*"),
-  ]);
-
+async function HomeHero() {
+  const { profile, user, accounts } = await getHomeAccountsData();
   const isAdmin = profile?.role === "ADMIN";
   const currency = profile?.currency_preference ?? "AUD";
 
-  const ownAccounts = (accounts ?? []).filter((a) => a.user_id === user?.id);
+  const ownAccounts = accounts.filter((a) => a.user_id === user?.id);
   const netWorth = ownAccounts.reduce((sum, a) => sum + a.current_balance, 0);
 
-  const hotel = hotelShifts ?? [];
-  const secondary = secondaryShifts ?? [];
-  const gym = gymLogs ?? [];
-
-  const monthHotel = hotel.filter((s) => isThisMonth(s.shift_date));
-  const monthSecondary = secondary.filter((s) => isThisMonth(s.shift_date));
-  const partnerMonthEarnings =
-    monthHotel.reduce((sum, s) => sum + s.calculated_pay, 0) +
-    monthSecondary.reduce((sum, s) => sum + s.calculated_pay, 0);
-  const partnerPending = secondary
-    .filter((s) => s.payout_status === "PENDING")
-    .reduce((sum, s) => sum + s.calculated_pay, 0);
-  const roomsCleanedMonth = monthHotel.reduce((s, x) => s + x.rooms_cleaned, 0);
-
-  const weekGymSets = gym
-    .filter((l) => isThisWeek(l.logged_at))
-    .reduce((sum, l) => sum + l.sets, 0);
+  let partnerMonthEarnings = 0;
+  if (!isAdmin) {
+    const { hotelShifts, secondaryShifts } = await getHomeActivityData();
+    const monthHotel = hotelShifts.filter((s) => isThisMonth(s.shift_date));
+    const monthSecondary = secondaryShifts.filter((s) => isThisMonth(s.shift_date));
+    partnerMonthEarnings =
+      monthHotel.reduce((sum, s) => sum + s.calculated_pay, 0) +
+      monthSecondary.reduce((sum, s) => sum + s.calculated_pay, 0);
+  }
 
   return (
-    <div className="flex flex-col gap-6">
-      <div>
+    <div>
+      <div className="mb-4">
         <p className="text-muted-foreground text-sm">{greeting()},</p>
         <h1 className="text-2xl font-semibold">{profile?.full_name}</h1>
       </div>
@@ -97,8 +99,34 @@ export default async function HomePage() {
           </p>
         </div>
       )}
+    </div>
+  );
+}
 
-      {isAdmin ? (
+async function HomeStats() {
+  const { profile, user, accounts } = await getHomeAccountsData();
+  const isAdmin = profile?.role === "ADMIN";
+  const ownAccountsCount = accounts.filter((a) => a.user_id === user?.id).length;
+
+  const { hotelShifts, secondaryShifts, gymLogs } = await getHomeActivityData();
+
+  const monthHotel = hotelShifts.filter((s) => isThisMonth(s.shift_date));
+  const partnerPending = secondaryShifts
+    .filter((s) => s.payout_status === "PENDING")
+    .reduce((sum, s) => sum + s.calculated_pay, 0);
+  const roomsCleanedMonth = monthHotel.reduce((s, x) => s + x.rooms_cleaned, 0);
+  const weekGymSets = gymLogs
+    .filter((l) => isThisWeek(l.logged_at))
+    .reduce((sum, l) => sum + l.sets, 0);
+
+  if (isAdmin) {
+    const monthSecondary = secondaryShifts.filter((s) => isThisMonth(s.shift_date));
+    const partnerMonthEarnings =
+      monthHotel.reduce((sum, s) => sum + s.calculated_pay, 0) +
+      monthSecondary.reduce((sum, s) => sum + s.calculated_pay, 0);
+
+    return (
+      <>
         <div className="grid grid-cols-2 gap-3">
           <StatCard
             label="Sets this week"
@@ -108,30 +136,13 @@ export default async function HomePage() {
           />
           <StatCard
             label="Accounts"
-            value={ownAccounts.length.toString()}
+            value={ownAccountsCount.toString()}
             icon={<Wallet className="size-4" />}
             accent="finance"
           />
         </div>
-      ) : (
-        <div className="grid grid-cols-2 gap-3">
-          <StatCard
-            label="Pending payout"
-            value={formatCurrency(partnerPending, "AUD")}
-            icon={<HandCoins className="size-4" />}
-            accent="warning"
-          />
-          <StatCard
-            label="Rooms this month"
-            value={roomsCleanedMonth.toString()}
-            icon={<BedDouble className="size-4" />}
-            accent="shift"
-          />
-        </div>
-      )}
 
-      {isAdmin ? (
-        <section className="flex flex-col gap-3">
+        <section className="mt-6 flex flex-col gap-3">
           <h2 className="text-sm font-medium">Her side of the sync</h2>
           <Link
             href="/work"
@@ -150,39 +161,109 @@ export default async function HomePage() {
             <ArrowRight className="text-muted-foreground size-5" />
           </Link>
         </section>
-      ) : null}
+      </>
+    );
+  }
 
-      <section className="grid grid-cols-2 gap-3">
+  return (
+    <div className="grid grid-cols-2 gap-3">
+      <StatCard
+        label="Pending payout"
+        value={formatCurrency(partnerPending, "AUD")}
+        icon={<HandCoins className="size-4" />}
+        accent="warning"
+      />
+      <StatCard
+        label="Rooms this month"
+        value={roomsCleanedMonth.toString()}
+        icon={<BedDouble className="size-4" />}
+        accent="shift"
+      />
+    </div>
+  );
+}
+
+async function HomeBills() {
+  const [{ profile, accounts }, bills] = await Promise.all([
+    getHomeAccountsData(),
+    getHomeUpcomingBillsData(),
+  ]);
+  const currency = profile?.currency_preference ?? "AUD";
+  const accountById = new Map(accounts.map((a) => [a.id, a]));
+
+  const upcomingBills = bills.map((bill) => ({
+    id: bill.id,
+    label: bill.label,
+    category: bill.category,
+    amount: bill.amount,
+    next_due_date: bill.next_due_date,
+    accountName: accountById.get(bill.account_id)?.account_name ?? "Unknown account",
+  }));
+
+  return (
+    <>
+      <UpcomingBillsWidget bills={upcomingBills} currency={currency} />
+      <BillNotifications bills={upcomingBills} />
+    </>
+  );
+}
+
+async function QuickLinks() {
+  const { profile } = await getHomeAccountsData();
+  const isAdmin = profile?.role === "ADMIN";
+
+  return (
+    <section className="grid grid-cols-2 gap-3">
+      <Link
+        href="/work"
+        className="border-border/60 bg-card flex flex-col gap-2 rounded-xl border p-4"
+      >
+        <span className="bg-shift/15 text-shift flex size-9 items-center justify-center rounded-lg">
+          <BedDouble className="size-4" />
+        </span>
+        <span className="text-sm font-medium">Work / Shifts</span>
+      </Link>
+      <Link
+        href="/wallet"
+        className="border-border/60 bg-card flex flex-col gap-2 rounded-xl border p-4"
+      >
+        <span className="bg-finance/15 text-finance flex size-9 items-center justify-center rounded-lg">
+          <Wallet className="size-4" />
+        </span>
+        <span className="text-sm font-medium">Wallet</span>
+      </Link>
+      {isAdmin ? (
         <Link
-          href="/work"
+          href="/gym"
           className="border-border/60 bg-card flex flex-col gap-2 rounded-xl border p-4"
         >
-          <span className="bg-shift/15 text-shift flex size-9 items-center justify-center rounded-lg">
-            <BedDouble className="size-4" />
+          <span className="bg-fitness/15 text-fitness flex size-9 items-center justify-center rounded-lg">
+            <Dumbbell className="size-4" />
           </span>
-          <span className="text-sm font-medium">Work / Shifts</span>
+          <span className="text-sm font-medium">Gym</span>
         </Link>
-        <Link
-          href="/wallet"
-          className="border-border/60 bg-card flex flex-col gap-2 rounded-xl border p-4"
-        >
-          <span className="bg-finance/15 text-finance flex size-9 items-center justify-center rounded-lg">
-            <Wallet className="size-4" />
-          </span>
-          <span className="text-sm font-medium">Wallet</span>
-        </Link>
-        {isAdmin ? (
-          <Link
-            href="/gym"
-            className="border-border/60 bg-card flex flex-col gap-2 rounded-xl border p-4"
-          >
-            <span className="bg-fitness/15 text-fitness flex size-9 items-center justify-center rounded-lg">
-              <Dumbbell className="size-4" />
-            </span>
-            <span className="text-sm font-medium">Gym</span>
-          </Link>
-        ) : null}
-      </section>
+      ) : null}
+    </section>
+  );
+}
+
+function HeroSkeleton() {
+  return (
+    <div>
+      <div className="mb-4 flex flex-col gap-2">
+        <div className="bg-muted h-4 w-24 animate-pulse rounded" />
+        <div className="bg-muted h-7 w-40 animate-pulse rounded" />
+      </div>
+      <div className="bg-muted h-24 w-full animate-pulse rounded-2xl" />
+    </div>
+  );
+}
+
+function QuickLinksSkeleton() {
+  return (
+    <div className="grid grid-cols-2 gap-3">
+      <div className="bg-muted h-[88px] animate-pulse rounded-xl" />
+      <div className="bg-muted h-[88px] animate-pulse rounded-xl" />
     </div>
   );
 }

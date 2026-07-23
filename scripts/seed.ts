@@ -8,6 +8,7 @@ import { config } from "dotenv";
 import { createClient } from "@supabase/supabase-js";
 
 import type { Database } from "../src/lib/types/database.types";
+import { toLocalDateKey } from "../src/lib/format";
 
 config({ path: ".env.local" });
 
@@ -121,6 +122,29 @@ async function main() {
     starting_balance: 800,
   });
 
+  // next_due_date computed relative to "today" (not a fixed past date) so a
+  // re-run always demonstrates a soon-due bill regardless of when seed runs.
+  const soon = new Date();
+  soon.setDate(soon.getDate() + 3);
+  const nextDueDate = toLocalDateKey(soon);
+
+  await ensureRecurringBill(supabase, userIds.PARTNER, {
+    account_name: "Sydney Commonwealth",
+    label: "Rent",
+    category: "RENT",
+    amount: 650,
+    frequency: "BIWEEKLY",
+    next_due_date: nextDueDate,
+  });
+  await ensureRecurringBill(supabase, userIds.ADMIN, {
+    account_name: "Nabil Bank",
+    label: "Sim plan",
+    category: "SIM_PLAN",
+    amount: 999,
+    frequency: "MONTHLY",
+    next_due_date: nextDueDate,
+  });
+
   for (const exercise of GYM_EXERCISES) {
     const { data: existing } = await supabase
       .from("gym_exercises")
@@ -197,6 +221,47 @@ async function ensureAccount(
   });
   if (error) throw error;
   console.log(`✓ account seeded: ${account.account_name}`);
+}
+
+async function ensureRecurringBill(
+  supabase: ReturnType<typeof createClient<Database>>,
+  userId: string,
+  bill: {
+    account_name: string;
+    label: string;
+    category: Database["public"]["Enums"]["expense_category"];
+    amount: number;
+    frequency: Database["public"]["Enums"]["recurring_frequency"];
+    next_due_date: string;
+  }
+) {
+  const { data: account } = await supabase
+    .from("accounts")
+    .select("id")
+    .eq("user_id", userId)
+    .eq("account_name", bill.account_name)
+    .maybeSingle();
+  if (!account) throw new Error(`Seed account not found: ${bill.account_name}`);
+
+  const { data: existing } = await supabase
+    .from("recurring_bills")
+    .select("id")
+    .eq("user_id", userId)
+    .eq("label", bill.label)
+    .maybeSingle();
+  if (existing) return;
+
+  const { error } = await supabase.from("recurring_bills").insert({
+    user_id: userId,
+    account_id: account.id,
+    label: bill.label,
+    category: bill.category,
+    amount: bill.amount,
+    frequency: bill.frequency,
+    next_due_date: bill.next_due_date,
+  });
+  if (error) throw error;
+  console.log(`✓ recurring bill seeded: ${bill.label}`);
 }
 
 main().catch((err) => {

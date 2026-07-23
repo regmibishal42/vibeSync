@@ -13,6 +13,19 @@ export type AccountType = "DIGITAL_WALLET" | "BANK" | "CASH";
 export type TransactionType = "EXPENSE" | "DEPOSIT" | "TRANSFER";
 export type DayOfWeekType = "WEEKDAY" | "SATURDAY" | "SUNDAY";
 export type PayoutStatusType = "PENDING" | "PAID";
+export type ExpenseCategory =
+  | "RENT"
+  | "SIM_PLAN"
+  | "GROCERIES"
+  | "TRAVEL"
+  | "UTILITIES"
+  | "TRANSPORT"
+  | "DINING"
+  | "HEALTH"
+  | "SHOPPING"
+  | "SUPPLEMENTS"
+  | "OTHER";
+export type RecurringFrequency = "WEEKLY" | "BIWEEKLY" | "MONTHLY";
 
 export type RoomDetail = {
   room: string;
@@ -78,7 +91,7 @@ export type Database = {
           user_id: string;
           amount: number;
           type: TransactionType;
-          category: string | null;
+          category: ExpenseCategory | null;
           merchant_or_item: string | null;
           transaction_date: string;
           created_at: string;
@@ -89,7 +102,7 @@ export type Database = {
           user_id: string;
           amount: number;
           type: TransactionType;
-          category?: string | null;
+          category?: ExpenseCategory | null;
           merchant_or_item?: string | null;
           transaction_date?: string;
         };
@@ -97,9 +110,45 @@ export type Database = {
           account_id: string;
           amount: number;
           type: TransactionType;
-          category: string | null;
+          category: ExpenseCategory | null;
           merchant_or_item: string | null;
           transaction_date: string;
+        }>;
+        Relationships: [];
+      };
+      recurring_bills: {
+        Row: {
+          id: string;
+          user_id: string;
+          account_id: string;
+          label: string;
+          category: ExpenseCategory;
+          amount: number;
+          frequency: RecurringFrequency;
+          next_due_date: string;
+          is_active: boolean;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          user_id: string;
+          account_id: string;
+          label: string;
+          category?: ExpenseCategory;
+          amount: number;
+          frequency: RecurringFrequency;
+          next_due_date: string;
+          is_active?: boolean;
+        };
+        Update: Partial<{
+          account_id: string;
+          label: string;
+          category: ExpenseCategory;
+          amount: number;
+          frequency: RecurringFrequency;
+          next_due_date: string;
+          is_active: boolean;
         }>;
         Relationships: [];
       };
@@ -247,6 +296,10 @@ export type Database = {
         Args: Record<PropertyKey, never>;
         Returns: boolean;
       };
+      mark_recurring_bill_paid: {
+        Args: { p_bill_id: string; p_paid_date?: string };
+        Returns: Database["public"]["Tables"]["transactions"]["Row"];
+      };
     };
     Enums: {
       profile_role: ProfileRole;
@@ -254,6 +307,8 @@ export type Database = {
       transaction_type: TransactionType;
       day_of_week_type: DayOfWeekType;
       payout_status_type: PayoutStatusType;
+      expense_category: ExpenseCategory;
+      recurring_frequency: RecurringFrequency;
     };
   };
 };
