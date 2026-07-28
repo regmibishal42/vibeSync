@@ -36,7 +36,7 @@ const FREQUENCY_LABEL: Record<Frequency, string> = {
   MONTHLY: "Every month",
 };
 
-export function RecurringBillForm({ accounts }: { accounts: Account[] }) {
+export function RecurringTransactionForm({ accounts }: { accounts: Account[] }) {
   const [open, setOpen] = useState(false);
   const [accountId, setAccountId] = useState(accounts[0]?.id ?? "");
   const [category, setCategory] = useState<ExpenseCategory>("RENT");

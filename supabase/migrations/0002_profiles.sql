@@ -1,4 +1,4 @@
--- profiles: one row per auth.users row, exactly 2 rows in this app (ADMIN + PARTNER).
+-- profiles: one row per auth.users row, exactly 2 rows in this app (OWNER + PARTNER).
 create table if not exists public.profiles (
   id uuid primary key references auth.users (id) on delete cascade,
   role profile_role not null,
@@ -17,7 +17,7 @@ language plpgsql
 as $$
 begin
   if new.currency_preference is null then
-    new.currency_preference := case when new.role = 'ADMIN' then 'NPR' else 'AUD' end;
+    new.currency_preference := case when new.role = 'OWNER' then 'NPR' else 'AUD' end;
   end if;
   return new;
 end;
@@ -33,10 +33,10 @@ create trigger trg_profiles_updated_at
   before update on public.profiles
   for each row execute function public.set_updated_at();
 
--- Central security helper used by every RLS policy in 0008. SECURITY DEFINER
+-- Central security helper used by every RLS policy in 0008+. SECURITY DEFINER
 -- + a fixed search_path so it can read profiles without recursing through
--- profiles' own RLS policy (which would otherwise call is_admin() again).
-create or replace function public.is_admin()
+-- profiles' own RLS policy (which would otherwise call is_owner() again).
+create or replace function public.is_owner()
 returns boolean
 language sql
 stable
@@ -44,8 +44,8 @@ security definer
 set search_path = public
 as $$
   select exists (
-    select 1 from public.profiles where id = auth.uid() and role = 'ADMIN'
+    select 1 from public.profiles where id = auth.uid() and role = 'OWNER'
   );
 $$;
 
-grant execute on function public.is_admin() to authenticated;
+grant execute on function public.is_owner() to authenticated;

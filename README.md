@@ -1,26 +1,26 @@
 # VibeSync
 
-A mobile-first PWA for two — hotel & secondary-job shift tracking, a gym
-progressive-overload log, and a multi-account expense wallet, with strict
-database-level privacy between an **ADMIN** account and a **PARTNER** account.
+A mobile-first PWA for two — multiple jobs (hourly/monthly/biweekly pay),
+a multi-account expense wallet with amount-first quick-add, lend/borrow
+tracking, recurring bills & salary, and a breakdown dashboard — with strict
+database-level privacy between an **OWNER** account and a **PARTNER** account.
 Built to run for free on Vercel's Hobby tier + Supabase's free tier.
 
 ## Who sees what
 
 Two fixed accounts, no public sign-up:
 
-| | ADMIN | PARTNER |
+| | OWNER | PARTNER |
 |---|---|---|
-| Gym | Full access | **Blocked entirely** — not just "no data," the RLS policy denies the query |
-| Own wallet & shifts | Full access | Full access |
-| Partner's / Admin's wallet & shifts | Full access (read + write) | No access |
+| Own wallet, jobs, loans | Full access | Full access |
+| Partner's / Owner's wallet, jobs, loans | Full access (read + write) | No access |
 | Parents' accounts | Full access | No access |
 
 This is enforced by Postgres Row Level Security, not application code — see
-[`supabase/migrations/0008_rls_policies.sql`](./supabase/migrations/0008_rls_policies.sql).
-Every policy reduces to one shape: `is_admin() OR user_id = auth.uid()`, with
-the gym tables dropping the ownership half entirely so the partner can't
-query gym data even in principle.
+[`supabase/migrations/0008_rls_policies.sql`](./supabase/migrations/0008_rls_policies.sql)
+plus the self-contained RLS blocks in `0010_recurring_transactions.sql` and
+`0011_loans.sql`. Every policy reduces to one shape:
+`is_owner() OR user_id = auth.uid()`.
 
 ## Stack
 
@@ -30,11 +30,10 @@ query gym data even in principle.
 - **Supabase** — Postgres + Auth + Row Level Security
 - **Tailwind CSS v4**, hand-authored shadcn/ui-style primitives (see [_why not the shadcn CLI_](#why-hand-authored-ui-components)), Lucide icons
 - **Recharts**, themed through a shadcn-style `ChartContainer`
-- **A hand-rolled service worker** for PWA support (see [_why not Serwist_](#why-a-hand-rolled-service-worker))
+- **A hand-rolled service worker** for PWA support (see [_why not Serwist_](#why-a-hand-rolled-service-worker)), plus a `localStorage`-backed offline queue for quick-add (see [_offline quick-add_](#offline-quick-add))
 
 All data fetching is Server Components + Server Actions + `revalidatePath` —
-there's no client-side data-fetching library (an earlier pass installed
-TanStack Query and never used it; removed as dead weight).
+there's no client-side data-fetching library.
 
 ## Getting started
 
@@ -56,7 +55,7 @@ grab three values from **Project Settings → API**:
 ### 3. Run the migrations
 
 In the Supabase dashboard's **SQL Editor**, run each file in
-`supabase/migrations/` **in order** (`0001_...` through `0010_...`), or use
+`supabase/migrations/` **in order** (`0001_...` through `0011_...`), or use
 the Supabase CLI:
 
 ```bash
@@ -79,11 +78,12 @@ emails/passwords/display names — those are read by `scripts/seed.ts`.
 npm run seed
 ```
 
-Idempotent — safe to re-run. Creates the ADMIN and PARTNER auth users
+Idempotent — safe to re-run. Creates the OWNER and PARTNER auth users
 (there's no public sign-up route; this script is the only way in), their
-`profiles` rows, a few starter accounts (Khalti, eSewa, Nabil Bank, a
-flagged parents' account, and a Sydney bank account for the partner), and
-the shared gym exercise catalog.
+`profiles` rows, a few starter accounts (Khalti, eSewa, Nabil Bank, a cash
+wallet, a flagged parents' account, and a Sydney bank account for the
+partner), two sample jobs (one hourly, one monthly-salary), a couple of
+recurring bills/salary schedules, and one sample loan.
 
 **Change both passwords after first login.**
 
@@ -112,19 +112,44 @@ leg on the destination — so the balance trigger
 transaction types: `accounts.current_balance` is always recomputed as
 `starting_balance + SUM(amount)` after every write.
 
-Hotel-shift and secondary-shift pay are computed by **database triggers**,
-not the client (`0006_hotel_shifts.sql`, `0007_secondary_shifts.sql`) — a
-buggy or tampered client can submit a date and a room list, but it cannot
-submit a wrong `calculated_pay`. `src/lib/calculations/shift-pay.ts` mirrors
-the same formulas in TypeScript purely so the UI can show an instant
-estimate while typing; the database is always the source of truth on
-refetch.
+Jobs are generic (`0006_jobs.sql`): any number per user, each either
+`FULL_TIME`/`PART_TIME` and paid `HOURLY`/`MONTHLY`/`BIWEEKLY`. Hourly jobs
+log `job_shifts` (pay is trigger-derived from the job's `hourly_rate`, never
+trusted from the client) and settle via `settle_job_shifts()`, which bundles
+every pending shift into a `payout_batches` row **and** posts a real wallet
+deposit in one atomic call. Salaried jobs skip shifts entirely and instead
+get a linked `recurring_transactions` row (`direction = 'INCOME'`) — a
+salaried job IS its recurring paycheck. `src/lib/calculations/job-pay.ts`
+mirrors the hourly formula in TypeScript purely so the UI can show an
+instant estimate while typing; the database is always the source of truth.
+
+Lending/borrowing (`0011_loans.sql`) shares one `loans` table for both
+directions (`direction` flips the sign everywhere) plus `loan_repayments`
+for partial paydowns. Creating or repaying a loan posts an ordinary signed
+`transactions` row (typed `LOAN`/`REPAYMENT`, tagged with `loan_id`) so it
+shows in the normal ledger but is easy to exclude from expense-category
+spending analysis. The `loan_balances` view nets everything per counterparty
+for the "who owes who" rollup.
 
 A transaction is attributed to whichever user **owns the account**, not
-whoever clicked submit — see `getAccountOwner` in
-`src/app/(app)/wallet/actions.ts`. This is what lets the ADMIN manage the
-PARTNER's accounts (the spec grants her full CRUD there) without her edits
-becoming invisible on the partner's own RLS-filtered view.
+whoever clicked submit — see `getAccountOwner`/`insertSignedTransaction` in
+`src/lib/wallet/create-transaction.ts`. This is what lets the OWNER manage
+the PARTNER's accounts (the spec grants her full CRUD there) without her
+edits becoming invisible on the partner's own RLS-filtered view.
+
+## Offline quick-add
+
+The FAB opens a full-screen, amount-first keypad (`components/wallet/
+quick-add-sheet.tsx`) that POSTs to `/api/wallet/quick-add` — a plain fetch
+endpoint, not a Server Action, specifically so it can be replayed later.
+If the device is offline (or the request fails), the entry is queued in
+`localStorage` (`src/lib/offline-queue.ts`) instead, shown optimistically
+right away, and flushed automatically on the next `online` event or app
+load (`components/pwa/offline-sync.tsx`). This deliberately skips the
+Background Sync API — it has no support on iOS Safari, which is most of
+this app's real usage, so a sync registration would silently never fire
+there; flush-on-reconnect covers the actual case (phone regains signal
+while the app is open) without that platform gap.
 
 ## Design notes for the curious
 
@@ -159,35 +184,33 @@ this is a new project, it uses the new convention directly:
 `src/proxy.ts` → `src/lib/supabase/proxy.ts` for the actual session-refresh
 and route-guard logic.
 
-### Nav differs by role, on purpose
-
-The bottom nav shows **Home · Work · Gym · Wallet** for the ADMIN, but
-**Home · Work · Wallet** for the PARTNER — there's no point linking her to a
-Gym tab that RLS will only ever show empty. The FAB's quick-log menu is
-role-aware the same way.
-
 ## Project layout
 
 ```
 src/
   app/
-    login/                 email+password sign-in (only entry point)
-    (app)/                 authenticated shell — bottom nav, FAB, header
-      page.tsx             role-aware home dashboard
-      work/                hotel shifts, secondary shifts, payout batches
-      gym/                 ADMIN-only machine/set tracker + overload chart
-      wallet/              multi-account ledger, transactions, transfers
+    login/                  email+password sign-in (only entry point)
+    (app)/                  authenticated shell — bottom nav, FAB, header
+      page.tsx              dashboard — net worth, week/month breakdown, upcoming
+      work/                 jobs (hourly/monthly/biweekly), shifts, payout batches
+      wallet/               multi-account ledger, quick-add, transfers, recurring
+      loans/                lend/borrow tracking, per-counterparty rollup
+    api/wallet/
+      quick-add/            plain fetch endpoint behind the offline queue
+      export/                CSV export
   components/
-    ui/                     hand-authored shadcn-style primitives
-    nav/ dashboard/ work/ gym/ wallet/   feature components
+    ui/                      hand-authored shadcn-style primitives
+    nav/ dashboard/ work/ wallet/ loans/ pwa/   feature components
   lib/
-    supabase/               browser/server/proxy Supabase clients
-    calculations/           pay-formula mirrors of the DB triggers
-    types/database.types.ts hand-written Supabase types (regeneratable via the Supabase CLI once linked)
+    supabase/                browser/server/proxy Supabase clients
+    calculations/            pay-formula mirrors of the DB triggers
+    offline-queue.ts         localStorage-backed quick-add retry queue
+    dashboard.ts             week/month period helpers
+    types/database.types.ts  hand-written Supabase types (regeneratable via the Supabase CLI once linked)
 scripts/
-  seed.ts                   creates the two accounts + starter data
+  seed.ts                    creates the two accounts + starter data
   generate-icons.ts          rasterizes public/icons/icon-mark.svg into the PWA icon set
-supabase/migrations/         numbered SQL migrations, including all RLS policies
+supabase/migrations/          numbered SQL migrations, including all RLS policies
 ```
 
 ## What to verify once you have a live Supabase project
@@ -197,29 +220,33 @@ provision one wasn't available in this environment), so `npm run build` /
 `tsc` / `eslint` are clean but the following need a real end-to-end check
 once you've completed steps 2–5 above:
 
-- Logging in as each seeded account and confirming the nav/gym gating
-- That a PARTNER truly cannot read gym data (try it from the Supabase SQL
-  editor as that role, or just confirm the Gym tab is absent and `/gym`
-  redirects her home)
-- That balances update immediately after logging a transaction, shift, or
-  transfer
-- PWA install prompt and offline behavior on an actual phone
-- That `migrations/0009_expense_categories.sql` and `0010_recurring_bills.sql`
-  apply cleanly against a real project (only ever run against an empty
-  `transactions` table in this build)
+- Logging in as each seeded account and confirming the OWNER/PARTNER RLS
+  scoping across accounts, jobs, and loans
+- That balances update immediately after a transaction, shift settlement,
+  recurring "mark paid", loan, or transfer
+- PWA install prompt and offline behavior on an actual phone — specifically
+  the quick-add offline queue: add an expense in airplane mode, confirm it
+  shows optimistically, then confirm it actually posts once back online
+- That `migrations/0006_jobs.sql` through `0011_loans.sql` apply cleanly
+  against a real project (only ever run against an empty `transactions`
+  table in this build)
 - `add_calendar_month()`'s month-overflow clamping — e.g.
   `select public.add_calendar_month(date '2026-01-31');` should return
   `2026-02-28`, not roll into March
-- "Mark paid" on a recurring bill: confirm it inserts one real transaction,
-  advances `next_due_date` by the right interval, and that a PARTNER can only
-  settle her own bills (RPC is `security invoker`)
+- "Mark paid" on a recurring bill/salary: confirm it inserts one real
+  transaction, advances `next_due_date` by the right interval, and that a
+  PARTNER can only settle her own rows (RPC is `security invoker`)
+- `settle_job_shifts()`: confirm it posts one deposit transaction tagged
+  with `job_id` and flips every pending shift to `PAID` in the same call
+- `create_loan()`/`repay_loan()`: confirm the signed ledger row matches the
+  loan's direction, and that `loan_balances` nets correctly across multiple
+  loans with the same counterparty
 - CSV export (`/api/wallet/export`) ownership scoping — a PARTNER's export
-  should never include the ADMIN's rows, and `?scope=all` should only work
-  for the ADMIN
-- Browser due-date notifications: the permission prompt, and that a bill only
-  notifies once per local day (not on every page load)
+  should never include the OWNER's rows, and `?scope=all` should only work
+  for the OWNER
+- Browser due-date notifications: the permission prompt, and that a bill/
+  salary row only notifies once per local day (not on every page load)
 - Real Lighthouse scores and Cache Components' static-shell behavior against
   the actual Vercel deployment — the streaming/PPR structure builds cleanly
   here, but perceived speed depends on real network/Supabase latency this
   sandbox can't reproduce
-# vibeSync

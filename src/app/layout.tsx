@@ -3,6 +3,7 @@ import { Plus_Jakarta_Sans, Geist_Mono } from "next/font/google";
 import "./globals.css";
 
 import { ServiceWorkerRegister } from "@/components/pwa/sw-register";
+import { OfflineSync } from "@/components/pwa/offline-sync";
 import { Toaster } from "@/components/ui/sonner";
 
 // Warm geometric-humanist sans (soft curve terminals, still crisp tabular
@@ -25,7 +26,7 @@ export const metadata: Metadata = {
     template: "%s · VibeSync",
   },
   description:
-    "Dual-user executive fitness & precision expense tracker for two.",
+    "Dual-user income, expense, job, and loan tracker for two.",
   appleWebApp: {
     capable: true,
     statusBarStyle: "black-translucent",
@@ -58,6 +59,7 @@ export default function RootLayout({
         {children}
         <Toaster />
         <ServiceWorkerRegister />
+        <OfflineSync />
       </body>
     </html>
   );

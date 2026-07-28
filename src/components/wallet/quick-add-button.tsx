@@ -14,10 +14,7 @@ type QuickAddAccount = {
   account_type: AccountType;
 };
 
-// One tap, straight to the amount keypad — no intermediate "what do you
-// want to log" menu. Adding an expense is this app's highest-frequency
-// action, so the FAB IS the quick-add trigger rather than a launcher for one.
-export function FabQuickLog({
+export function QuickAddButton({
   accounts,
   currency,
 }: {
@@ -28,16 +25,10 @@ export function FabQuickLog({
 
   return (
     <>
-      <Button
-        size="fab"
-        onClick={() => setOpen(true)}
-        aria-label="Quick add"
-        className="glow-finance fixed bottom-20 left-1/2 z-50 -translate-x-1/2 shadow-xl"
-        style={{ marginBottom: "env(safe-area-inset-bottom)" }}
-      >
-        <Plus className="size-7" />
+      <Button variant="finance" onClick={() => setOpen(true)}>
+        <Plus className="size-4" />
+        Quick add
       </Button>
-
       <QuickAddSheet accounts={accounts} currency={currency} open={open} onOpenChange={setOpen} />
     </>
   );

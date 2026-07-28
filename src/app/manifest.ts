@@ -5,13 +5,13 @@ export default function manifest(): MetadataRoute.Manifest {
     name: "VibeSync",
     short_name: "VibeSync",
     description:
-      "Dual-user executive fitness & precision expense tracker for two.",
+      "Dual-user income, expense, job, and loan tracker for two.",
     start_url: "/",
     display: "standalone",
     orientation: "portrait",
     background_color: "#fdf3eb",
     theme_color: "#fdf3eb",
-    categories: ["finance", "health", "productivity"],
+    categories: ["finance", "productivity"],
     icons: [
       {
         src: "/icons/icon-192.png",

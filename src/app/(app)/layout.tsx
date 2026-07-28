@@ -6,7 +6,9 @@ import { BottomNav } from "@/components/nav/bottom-nav";
 import { FabQuickLog } from "@/components/nav/fab-quick-log";
 import { Button } from "@/components/ui/button";
 import { AppShellSkeleton } from "@/components/skeletons/app-shell-skeleton";
-import { getCurrentProfile } from "@/lib/supabase/profile";
+import { TransactionsProvider } from "@/components/wallet/transactions-provider";
+import { getCurrentProfile, getCurrentUser } from "@/lib/supabase/profile";
+import { createClient } from "@/lib/supabase/server";
 
 // This shell is permanently, legitimately dynamic — financial/session data
 // can never be prefetched or shown stale across users — so it's exempted
@@ -57,12 +59,19 @@ async function AppChrome({ children }: { children: React.ReactNode }) {
     );
   }
 
+  const [user, supabase] = await Promise.all([getCurrentUser(), createClient()]);
+  const { data: accounts } = await supabase
+    .from("accounts")
+    .select("id, user_id, account_name, account_type")
+    .eq("user_id", user?.id ?? "")
+    .order("account_name");
+
   return (
-    <>
+    <TransactionsProvider>
       <AppHeader fullName={profile.full_name} role={profile.role} />
       <main className="flex-1 px-4 pb-28 pt-4">{children}</main>
-      <FabQuickLog role={profile.role} />
-      <BottomNav role={profile.role} />
-    </>
+      <FabQuickLog accounts={accounts ?? []} currency={profile.currency_preference} />
+      <BottomNav />
+    </TransactionsProvider>
   );
 }
