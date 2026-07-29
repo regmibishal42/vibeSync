@@ -13,6 +13,8 @@ do $$ begin
     'SHOPPING',
     'ENTERTAINMENT',
     'SUBSCRIPTIONS',
+    'FUEL',
+    'INVESTMENT',
     'OTHER'
   );
 exception when duplicate_object then null; end $$;
@@ -31,6 +33,8 @@ alter table public.transactions
       when 'SHOPPING' then 'SHOPPING'
       when 'ENTERTAINMENT' then 'ENTERTAINMENT'
       when 'SUBSCRIPTIONS' then 'SUBSCRIPTIONS'
+      when 'FUEL' then 'FUEL'
+      when 'INVESTMENT' then 'INVESTMENT'
       else 'OTHER'
     end
   )::expense_category;
