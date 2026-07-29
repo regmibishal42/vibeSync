@@ -88,6 +88,7 @@ async function LoansSummary() {
                   loan={loan}
                   repaid={repaidByLoan.get(loan.id) ?? 0}
                   currency={currency}
+                  accounts={accounts}
                 />
               ))}
             </section>
@@ -102,6 +103,7 @@ async function LoansSummary() {
                   loan={loan}
                   repaid={repaidByLoan.get(loan.id) ?? 0}
                   currency={currency}
+                  accounts={accounts}
                 />
               ))}
             </section>

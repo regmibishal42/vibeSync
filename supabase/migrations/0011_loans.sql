@@ -102,10 +102,18 @@ grant execute on function public.create_loan(uuid, text, loan_direction, numeric
 -- repay_loan: a repayment reverses the original direction (repaying a LENT
 -- loan is money coming back to you; repaying a BORROWED loan is money going
 -- back out) and auto-settles once repayments cover the principal.
+-- p_account_id lets a repayment land somewhere other than where the loan
+-- was originally lent/borrowed from — e.g. you lent cash out of your bank
+-- account but a friend paid you back in physical cash — defaulting to the
+-- loan's own account when omitted. Validated against v_loan.user_id (the
+-- loan's actual owner), not auth.uid(), so this stays correct even when
+-- OWNER is settling a PARTNER's loan: OWNER's own accounts must never be
+-- silently usable as the landing spot for someone else's repayment.
 create or replace function public.repay_loan(
   p_loan_id uuid,
   p_amount numeric,
-  p_paid_date date default current_date
+  p_paid_date date default current_date,
+  p_account_id uuid default null
 )
 returns public.loans
 language plpgsql
@@ -114,10 +122,17 @@ set search_path = public
 as $$
 declare
   v_loan public.loans;
+  v_target_account_id uuid;
+  v_target_account_owner uuid;
   v_signed_amount numeric(14, 2);
   v_tx public.transactions;
-  v_repaid numeric(14, 2);
+  v_already_repaid numeric(14, 2);
+  v_remaining numeric(14, 2);
 begin
+  if p_amount <= 0 then
+    raise exception 'Repayment amount must be greater than 0';
+  end if;
+
   select * into v_loan from public.loans where id = p_loan_id for update;
   if not found then
     raise exception 'Loan % not found', p_loan_id;
@@ -126,22 +141,40 @@ begin
     raise exception 'Loan % is already settled', p_loan_id;
   end if;
 
+  v_target_account_id := coalesce(p_account_id, v_loan.account_id);
+
+  select user_id into v_target_account_owner
+  from public.accounts where id = v_target_account_id;
+
+  if v_target_account_owner is null then
+    raise exception 'Account % not found', v_target_account_id;
+  end if;
+  if v_target_account_owner <> v_loan.user_id then
+    raise exception 'Repayment account must belong to the loan''s own owner';
+  end if;
+
+  select coalesce(sum(amount), 0) into v_already_repaid
+  from public.loan_repayments where loan_id = p_loan_id;
+  v_remaining := v_loan.principal_amount - v_already_repaid;
+
+  if p_amount > v_remaining then
+    raise exception 'Repayment of % exceeds remaining balance of %', p_amount, v_remaining;
+  end if;
+
   v_signed_amount := case when v_loan.direction = 'LENT' then abs(p_amount) else -abs(p_amount) end;
 
   insert into public.transactions (
     account_id, user_id, amount, type, merchant_or_item, transaction_date, loan_id
   ) values (
-    v_loan.account_id, v_loan.user_id, v_signed_amount, 'REPAYMENT', v_loan.counterparty_name, p_paid_date, v_loan.id
+    v_target_account_id, v_loan.user_id, v_signed_amount, 'REPAYMENT', v_loan.counterparty_name, p_paid_date, v_loan.id
   )
   returning * into v_tx;
 
   insert into public.loan_repayments (loan_id, user_id, amount, paid_date, transaction_id)
   values (p_loan_id, v_loan.user_id, abs(p_amount), p_paid_date, v_tx.id);
 
-  select coalesce(sum(amount), 0) into v_repaid from public.loan_repayments where loan_id = p_loan_id;
-
   update public.loans
-  set is_settled = (v_repaid >= principal_amount), updated_at = now()
+  set is_settled = (v_already_repaid + abs(p_amount) >= principal_amount), updated_at = now()
   where id = p_loan_id
   returning * into v_loan;
 
@@ -149,7 +182,7 @@ begin
 end;
 $$;
 
-grant execute on function public.repay_loan(uuid, numeric, date) to authenticated;
+grant execute on function public.repay_loan(uuid, numeric, date, uuid) to authenticated;
 
 -- loan_balances: per-counterparty net position (positive = they owe you net,
 -- negative = you owe them net) for the "who owes who" rollup. security_invoker

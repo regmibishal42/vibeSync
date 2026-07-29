@@ -22,7 +22,10 @@ export const getLoansData = cache(async () => {
       supabase.from("loans").select("*").order("loan_date", { ascending: false }),
       supabase.from("loan_repayments").select("*"),
       supabase.from("loan_balances").select("*"),
-      supabase.from("accounts").select("id, user_id, account_name").order("account_name"),
+      supabase
+        .from("accounts")
+        .select("id, user_id, account_name, account_type")
+        .order("account_name"),
     ]);
 
   return {

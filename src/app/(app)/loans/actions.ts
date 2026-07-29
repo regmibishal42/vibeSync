@@ -68,6 +68,7 @@ const repaySchema = z.object({
   loanId: z.string().uuid(),
   amount: z.coerce.number().positive("Must be greater than 0"),
   paidDate: z.string().min(1),
+  accountId: z.string().uuid().optional(),
 });
 
 export async function repayLoan(
@@ -87,6 +88,7 @@ export async function repayLoan(
     loanId: formData.get("loanId"),
     amount: formData.get("amount"),
     paidDate: formData.get("paidDate"),
+    accountId: formData.get("accountId") || undefined,
   });
 
   if (!parsed.success) {
@@ -97,6 +99,7 @@ export async function repayLoan(
     p_loan_id: parsed.data.loanId,
     p_amount: parsed.data.amount,
     p_paid_date: parsed.data.paidDate,
+    p_account_id: parsed.data.accountId ?? null,
   });
 
   if (error) {

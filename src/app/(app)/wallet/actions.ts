@@ -5,7 +5,7 @@ import { z } from "zod";
 
 import { createClient } from "@/lib/supabase/server";
 import { CATEGORY_ORDER } from "@/lib/wallet/categories";
-import { getAccountOwner, insertSignedTransaction } from "@/lib/wallet/create-transaction";
+import { insertSignedTransaction, transferLabels } from "@/lib/wallet/create-transaction";
 import type { ExpenseCategory } from "@/lib/types/database.types";
 
 const categoryEnum = CATEGORY_ORDER as [ExpenseCategory, ...ExpenseCategory[]];
@@ -111,30 +111,37 @@ export async function createTransaction(
     // whoever clicked submit — this is what lets the OWNER manage the
     // PARTNER's accounts (spec grants her full CRUD there) without her
     // edits silently becoming invisible on the partner's own filtered view.
-    const [sourceOwner, destOwner] = await Promise.all([
-      getAccountOwner(supabase, parsed.data.accountId),
-      getAccountOwner(supabase, parsed.data.destinationAccountId),
-    ]);
+    // account_type is fetched alongside so a BANK->CASH/CASH->BANK move can
+    // be labeled as a real withdrawal/deposit instead of a generic transfer.
+    const { data: legAccounts } = await supabase
+      .from("accounts")
+      .select("id, user_id, account_type")
+      .in("id", [parsed.data.accountId, parsed.data.destinationAccountId]);
 
-    if (!sourceOwner || !destOwner) {
+    const source = legAccounts?.find((a) => a.id === parsed.data.accountId);
+    const destination = legAccounts?.find((a) => a.id === parsed.data.destinationAccountId);
+
+    if (!source || !destination) {
       return { error: "Could not resolve account ownership." };
     }
+
+    const labels = transferLabels(source.account_type, destination.account_type);
 
     const { error } = await supabase.from("transactions").insert([
       {
         account_id: parsed.data.accountId,
-        user_id: sourceOwner,
+        user_id: source.user_id,
         amount: -Math.abs(parsed.data.amount),
         type: "TRANSFER" as const,
-        merchant_or_item: "Transfer out",
+        merchant_or_item: labels.out,
         transaction_date: parsed.data.transactionDate,
       },
       {
         account_id: parsed.data.destinationAccountId,
-        user_id: destOwner,
+        user_id: destination.user_id,
         amount: Math.abs(parsed.data.amount),
         type: "TRANSFER" as const,
-        merchant_or_item: "Transfer in",
+        merchant_or_item: labels.in,
         transaction_date: parsed.data.transactionDate,
       },
     ]);

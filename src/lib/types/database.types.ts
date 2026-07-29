@@ -345,7 +345,12 @@ export type Database = {
         Returns: Database["public"]["Tables"]["loans"]["Row"];
       };
       repay_loan: {
-        Args: { p_loan_id: string; p_amount: number; p_paid_date?: string };
+        Args: {
+          p_loan_id: string;
+          p_amount: number;
+          p_paid_date?: string;
+          p_account_id?: string | null;
+        };
         Returns: Database["public"]["Tables"]["loans"]["Row"];
       };
     };
