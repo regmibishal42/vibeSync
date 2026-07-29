@@ -1,28 +1,24 @@
 import type { Metadata } from "next";
 import dynamic from "next/dynamic";
 import { Suspense } from "react";
-import { BedDouble, Clock, DollarSign, HandCoins } from "lucide-react";
+import { Briefcase, Clock, HandCoins } from "lucide-react";
 
-import { getWorkShiftsData, getPayoutBatchesData } from "@/app/(app)/work/data";
+import { getJobsData, getPayoutBatchesData } from "@/app/(app)/work/data";
 import { formatCurrency } from "@/lib/format";
 import { StatCard } from "@/components/dashboard/stat-card";
 import { StatGridSkeleton } from "@/components/skeletons/stat-grid-skeleton";
 import { ChartSkeleton } from "@/components/skeletons/chart-skeleton";
 import { ListSkeleton } from "@/components/skeletons/list-skeleton";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { HotelShiftForm } from "@/components/work/hotel-shift-form";
-import { HotelShiftList } from "@/components/work/hotel-shift-list";
-import { SecondaryShiftForm } from "@/components/work/secondary-shift-form";
-import { SecondaryShiftList } from "@/components/work/secondary-shift-list";
+import { JobForm } from "@/components/work/job-form";
+import { JobCard } from "@/components/work/job-card";
 import { PayoutBatchList } from "@/components/work/payout-batch-list";
-import { CreatePayoutBatchButton } from "@/components/work/create-payout-batch-button";
 
 const EarningsChart = dynamic(
   () => import("@/components/work/earnings-chart").then((m) => m.EarningsChart),
   { loading: () => <ChartSkeleton /> }
 );
 
-export const metadata: Metadata = { title: "Work / Shifts" };
+export const metadata: Metadata = { title: "Work" };
 
 function isThisMonth(dateISO: string) {
   const d = new Date(`${dateISO}T00:00:00`);
@@ -30,42 +26,26 @@ function isThisMonth(dateISO: string) {
   return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
 }
 
-export default function WorkPage({
-  searchParams,
-}: {
-  searchParams: Promise<{ quick?: string }>;
-}) {
+export default function WorkPage() {
   return (
     <div className="flex flex-col gap-6">
-      <h1 className="text-2xl font-semibold">Work / Shifts</h1>
+      <h1 className="text-2xl font-semibold">Work</h1>
 
       <Suspense fallback={<WorkSummarySkeleton />}>
-        <WorkSummary searchParams={searchParams} />
+        <WorkSummary />
       </Suspense>
     </div>
   );
 }
 
-async function WorkSummary({
-  searchParams,
-}: {
-  searchParams: Promise<{ quick?: string }>;
-}) {
-  const { quick } = await searchParams;
-  const { profile, hotel, secondary } = await getWorkShiftsData();
-  const isPartner = profile?.role === "PARTNER";
+async function WorkSummary() {
+  const { profile, jobs, shifts, salaries, accounts } = await getJobsData();
+  const currency = profile?.currency_preference ?? "AUD";
 
-  const monthHotel = hotel.filter((s) => isThisMonth(s.shift_date));
-  const monthSecondary = secondary.filter((s) => isThisMonth(s.shift_date));
-
-  const roomsCleaned = monthHotel.reduce((sum, s) => sum + s.rooms_cleaned, 0);
-  const totalCredits = monthHotel.reduce((sum, s) => sum + s.total_credits, 0);
-  const hoursWorked = monthSecondary.reduce((sum, s) => sum + s.hours_worked, 0);
-  const monthEarnings =
-    monthHotel.reduce((sum, s) => sum + s.calculated_pay, 0) +
-    monthSecondary.reduce((sum, s) => sum + s.calculated_pay, 0);
-
-  const pendingSecondaryTotal = secondary
+  const hourlyJobs = jobs.filter((j) => j.pay_type === "HOURLY");
+  const monthShifts = shifts.filter((s) => isThisMonth(s.shift_date));
+  const hoursThisMonth = monthShifts.reduce((sum, s) => sum + s.hours_worked, 0);
+  const pendingPayout = shifts
     .filter((s) => s.payout_status === "PENDING")
     .reduce((sum, s) => sum + s.calculated_pay, 0);
 
@@ -80,110 +60,100 @@ async function WorkSummary({
       month: "numeric",
       day: "numeric",
     }),
-    hotel: hotel
-      .filter((s) => s.shift_date === dateISO)
-      .reduce((sum, s) => sum + s.calculated_pay, 0),
-    secondary: secondary
+    pay: shifts
       .filter((s) => s.shift_date === dateISO)
       .reduce((sum, s) => sum + s.calculated_pay, 0),
   }));
 
+  const salariesByJob = new Map(salaries.filter((s) => s.job_id).map((s) => [s.job_id!, s]));
+  const shiftsByJob = new Map<string, typeof shifts>();
+  for (const shift of shifts) {
+    shiftsByJob.set(shift.job_id, [...(shiftsByJob.get(shift.job_id) ?? []), shift]);
+  }
+
   return (
     <>
-      <p className="text-muted-foreground text-sm">
-        {isPartner
-          ? "This month across both jobs."
-          : "Read-only view of her shift income this month."}
-      </p>
-
       <div className="grid grid-cols-2 gap-3">
         <StatCard
-          label="Rooms cleaned"
-          value={roomsCleaned.toString()}
-          icon={<BedDouble className="size-4" />}
+          label="Active jobs"
+          value={jobs.filter((j) => j.is_active).length.toString()}
+          icon={<Briefcase className="size-4" />}
           accent="shift"
         />
         <StatCard
-          label="Total credits"
-          value={totalCredits.toFixed(1)}
-          icon={<HandCoins className="size-4" />}
-          accent="shift"
-        />
-        <StatCard
-          label="Hours (secondary)"
-          value={hoursWorked.toFixed(1)}
+          label="Hours this month"
+          value={hoursThisMonth.toFixed(1)}
           icon={<Clock className="size-4" />}
           accent="shift"
         />
         <StatCard
-          label="Month earnings"
-          value={formatCurrency(monthEarnings, "AUD")}
-          icon={<DollarSign className="size-4" />}
-          accent="finance"
+          label="Pending payout"
+          value={formatCurrency(pendingPayout, currency)}
+          icon={<HandCoins className="size-4" />}
+          accent="warning"
         />
       </div>
 
-      <div className="border-border/60 bg-card rounded-xl border p-4">
-        <h2 className="mb-2 text-sm font-medium">Last 14 days</h2>
-        <EarningsChart data={chartData} />
+      {hourlyJobs.length > 0 ? (
+        <div className="border-border/60 bg-card rounded-xl border p-4">
+          <h2 className="mb-2 text-sm font-medium">Last 14 days</h2>
+          <EarningsChart data={chartData} />
+        </div>
+      ) : null}
+
+      <div className="flex items-center justify-between">
+        <h2 className="text-lg font-semibold">Jobs</h2>
+        <JobForm accounts={accounts} />
       </div>
 
-      <Tabs defaultValue="hotel">
-        <TabsList className="w-full">
-          <TabsTrigger value="hotel" className="flex-1">
-            Hotel
-          </TabsTrigger>
-          <TabsTrigger value="secondary" className="flex-1">
-            Secondary
-          </TabsTrigger>
-          <TabsTrigger value="payouts" className="flex-1">
-            Payouts
-          </TabsTrigger>
-        </TabsList>
+      {jobs.length === 0 ? (
+        <p className="text-muted-foreground text-sm">
+          No jobs yet — add a full-time, part-time, hourly, or salaried job to
+          start tracking income.
+        </p>
+      ) : (
+        <div className="flex flex-col gap-3">
+          {jobs.map((job) => (
+            <JobCard
+              key={job.id}
+              job={job}
+              shifts={shiftsByJob.get(job.id) ?? []}
+              salary={salariesByJob.get(job.id)}
+              currency={currency}
+            />
+          ))}
+        </div>
+      )}
 
-        <TabsContent value="hotel" className="flex flex-col gap-3 pt-3">
-          {isPartner ? <HotelShiftForm defaultOpen={quick === "hotel"} /> : null}
-          <HotelShiftList shifts={hotel} />
-        </TabsContent>
-
-        <TabsContent value="secondary" className="flex flex-col gap-3 pt-3">
-          {isPartner ? <SecondaryShiftForm /> : null}
-          <SecondaryShiftList shifts={secondary} />
-        </TabsContent>
-
-        <TabsContent value="payouts" className="flex flex-col gap-3 pt-3">
-          <Suspense fallback={<ListSkeleton rows={2} />}>
-            <PayoutsPanel isPartner={isPartner} pendingTotal={pendingSecondaryTotal} />
-          </Suspense>
-        </TabsContent>
-      </Tabs>
+      <div className="flex flex-col gap-3">
+        <h2 className="text-lg font-semibold">Payout history</h2>
+        <Suspense fallback={<ListSkeleton rows={2} />}>
+          <PayoutHistory
+            jobNames={new Map(jobs.map((j) => [j.id, j.name]))}
+            currency={currency}
+          />
+        </Suspense>
+      </div>
     </>
   );
 }
 
-async function PayoutsPanel({
-  isPartner,
-  pendingTotal,
+async function PayoutHistory({
+  jobNames,
+  currency,
 }: {
-  isPartner: boolean;
-  pendingTotal: number;
+  jobNames: Map<string, string>;
+  currency: string;
 }) {
   const batches = await getPayoutBatchesData();
-
-  return (
-    <>
-      {isPartner ? <CreatePayoutBatchButton pendingTotal={pendingTotal} /> : null}
-      <PayoutBatchList batches={batches} />
-    </>
-  );
+  return <PayoutBatchList batches={batches} jobNames={jobNames} currency={currency} />;
 }
 
 function WorkSummarySkeleton() {
   return (
     <div className="flex flex-col gap-6">
-      <StatGridSkeleton count={4} columns={2} />
+      <StatGridSkeleton count={3} columns={2} />
       <ChartSkeleton />
-      <div className="bg-muted h-10 w-full animate-pulse rounded-lg" />
       <ListSkeleton />
     </div>
   );

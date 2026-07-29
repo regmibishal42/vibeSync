@@ -36,8 +36,8 @@ export function AppHeader({
 
       <DropdownMenu>
         <DropdownMenuTrigger className="flex items-center gap-2 rounded-full outline-none">
-          <Badge variant={role === "ADMIN" ? "shift" : "finance"}>
-            {role === "ADMIN" ? "Admin" : "Partner"}
+          <Badge variant={role === "OWNER" ? "shift" : "finance"}>
+            {role === "OWNER" ? "Owner" : "Partner"}
           </Badge>
           <Avatar className="size-9">
             <AvatarFallback className="text-xs font-semibold">

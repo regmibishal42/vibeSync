@@ -24,6 +24,9 @@ async function getAccountOwner(
   return data?.user_id ?? null;
 }
 
+// Wallet's "add recurring" form only ever creates EXPENSE bills — salary
+// (INCOME) rows are created from the Work page alongside their job, since a
+// salaried job IS its recurring paycheck (see createJob() in work/actions.ts).
 const recurringBillSchema = z.object({
   accountId: z.string().uuid("Pick an account"),
   label: z.string().min(1, "Name is required"),
@@ -61,16 +64,17 @@ export async function createRecurringBill(
 
   // Same attribution rule as createTransaction/createAccount: the bill
   // belongs to whoever owns the chosen account, not necessarily whoever
-  // submitted the form — lets the ADMIN set up a recurring bill against the
+  // submitted the form — lets the OWNER set up a recurring bill against the
   // PARTNER's account without it vanishing from her own RLS-filtered view.
   const ownerId = await getAccountOwner(supabase, parsed.data.accountId);
   if (!ownerId) {
     return { error: "Could not resolve account ownership." };
   }
 
-  const { error } = await supabase.from("recurring_bills").insert({
+  const { error } = await supabase.from("recurring_transactions").insert({
     user_id: ownerId,
     account_id: parsed.data.accountId,
+    direction: "EXPENSE",
     label: parsed.data.label,
     category: parsed.data.category,
     amount: parsed.data.amount,
@@ -87,7 +91,9 @@ export async function createRecurringBill(
   return { success: true };
 }
 
-export async function markRecurringBillPaid(billId: string): Promise<ActionResult> {
+export async function markRecurringTransactionPaid(
+  recurringId: string
+): Promise<ActionResult> {
   const supabase = await createClient();
   const {
     data: { user },
@@ -97,8 +103,8 @@ export async function markRecurringBillPaid(billId: string): Promise<ActionResul
     return { error: "Not signed in." };
   }
 
-  const { error } = await supabase.rpc("mark_recurring_bill_paid", {
-    p_bill_id: billId,
+  const { error } = await supabase.rpc("mark_recurring_transaction_paid", {
+    p_recurring_id: recurringId,
   });
 
   if (error) {
@@ -106,11 +112,14 @@ export async function markRecurringBillPaid(billId: string): Promise<ActionResul
   }
 
   revalidatePath("/wallet");
+  revalidatePath("/work");
   revalidatePath("/");
   return { success: true };
 }
 
-export async function deactivateRecurringBill(billId: string): Promise<ActionResult> {
+export async function deactivateRecurringTransaction(
+  recurringId: string
+): Promise<ActionResult> {
   const supabase = await createClient();
   const {
     data: { user },
@@ -121,15 +130,16 @@ export async function deactivateRecurringBill(billId: string): Promise<ActionRes
   }
 
   const { error } = await supabase
-    .from("recurring_bills")
+    .from("recurring_transactions")
     .update({ is_active: false })
-    .eq("id", billId);
+    .eq("id", recurringId);
 
   if (error) {
     return { error: error.message };
   }
 
   revalidatePath("/wallet");
+  revalidatePath("/work");
   revalidatePath("/");
   return { success: true };
 }

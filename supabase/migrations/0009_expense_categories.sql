@@ -7,15 +7,12 @@
 do $$ begin
   create type expense_category as enum (
     'RENT',
-    'SIM_PLAN',
-    'GROCERIES',
     'TRAVEL',
-    'UTILITIES',
-    'TRANSPORT',
-    'DINING',
-    'HEALTH',
+    'PHONE_BILL',
+    'GROCERIES',
     'SHOPPING',
-    'SUPPLEMENTS',
+    'ENTERTAINMENT',
+    'SUBSCRIPTIONS',
     'OTHER'
   );
 exception when duplicate_object then null; end $$;
@@ -25,23 +22,23 @@ alter table public.transactions
   using (
     case upper(coalesce(category, ''))
       when 'RENT' then 'RENT'
-      when 'SIM PLAN' then 'SIM_PLAN'
-      when 'SIM_PLAN' then 'SIM_PLAN'
-      when 'GROCERIES' then 'GROCERIES'
       when 'TRAVEL' then 'TRAVEL'
-      when 'UTILITIES' then 'UTILITIES'
-      when 'TRANSPORT' then 'TRANSPORT'
-      when 'DINING' then 'DINING'
-      when 'HEALTH' then 'HEALTH'
+      when 'SIM PLAN' then 'PHONE_BILL'
+      when 'SIM_PLAN' then 'PHONE_BILL'
+      when 'PHONE_BILL' then 'PHONE_BILL'
+      when 'PHONE BILL' then 'PHONE_BILL'
+      when 'GROCERIES' then 'GROCERIES'
       when 'SHOPPING' then 'SHOPPING'
-      when 'SUPPLEMENTS' then 'SUPPLEMENTS'
+      when 'ENTERTAINMENT' then 'ENTERTAINMENT'
+      when 'SUBSCRIPTIONS' then 'SUBSCRIPTIONS'
       else 'OTHER'
     end
   )::expense_category;
 
--- Category stays nullable at the column level (TRANSFER/DEPOSIT rows don't
--- need one), but is required for EXPENSE rows specifically — that's what
--- the category-based spending analysis on the wallet page depends on.
+-- Category stays nullable at the column level (TRANSFER/DEPOSIT/LOAN/
+-- REPAYMENT rows don't need one), but is required for EXPENSE rows
+-- specifically — that's what the category-based spending analysis on the
+-- wallet page depends on.
 alter table public.transactions
   add constraint transactions_expense_requires_category
   check (type <> 'EXPENSE' or category is not null);

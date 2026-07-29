@@ -5,24 +5,12 @@ import { z } from "zod";
 
 import { createClient } from "@/lib/supabase/server";
 import { CATEGORY_ORDER } from "@/lib/wallet/categories";
-import type { SupabaseClient } from "@supabase/supabase-js";
-import type { Database, ExpenseCategory } from "@/lib/types/database.types";
+import { getAccountOwner, insertSignedTransaction } from "@/lib/wallet/create-transaction";
+import type { ExpenseCategory } from "@/lib/types/database.types";
 
 const categoryEnum = CATEGORY_ORDER as [ExpenseCategory, ...ExpenseCategory[]];
 
 type ActionResult = { error?: string; success?: boolean };
-
-async function getAccountOwner(
-  supabase: SupabaseClient<Database>,
-  accountId: string
-): Promise<string | null> {
-  const { data } = await supabase
-    .from("accounts")
-    .select("user_id")
-    .eq("id", accountId)
-    .single();
-  return data?.user_id ?? null;
-}
 
 const accountSchema = z.object({
   accountName: z.string().min(1, "Name is required"),
@@ -120,7 +108,7 @@ export async function createTransaction(
     }
 
     // A transaction is attributed to whoever *owns the account*, not
-    // whoever clicked submit — this is what lets the ADMIN manage the
+    // whoever clicked submit — this is what lets the OWNER manage the
     // PARTNER's accounts (spec grants her full CRUD there) without her
     // edits silently becoming invisible on the partner's own filtered view.
     const [sourceOwner, destOwner] = await Promise.all([
@@ -173,28 +161,17 @@ export async function createTransaction(
     return { error: parsed.error.issues[0]?.message ?? "Invalid input" };
   }
 
-  const signedAmount =
-    parsed.data.type === "EXPENSE"
-      ? -Math.abs(parsed.data.amount)
-      : Math.abs(parsed.data.amount);
-
-  const ownerId = await getAccountOwner(supabase, parsed.data.accountId);
-  if (!ownerId) {
-    return { error: "Could not resolve account ownership." };
-  }
-
-  const { error } = await supabase.from("transactions").insert({
-    account_id: parsed.data.accountId,
-    user_id: ownerId,
-    amount: signedAmount,
+  const { error } = await insertSignedTransaction(supabase, {
+    accountId: parsed.data.accountId,
     type: parsed.data.type,
-    category: parsed.data.category ?? null,
-    merchant_or_item: parsed.data.merchantOrItem ?? null,
-    transaction_date: parsed.data.transactionDate,
+    amount: parsed.data.amount,
+    category: parsed.data.category,
+    merchantOrItem: parsed.data.merchantOrItem,
+    transactionDate: parsed.data.transactionDate,
   });
 
   if (error) {
-    return { error: error.message };
+    return { error };
   }
 
   revalidatePath("/wallet");

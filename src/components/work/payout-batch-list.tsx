@@ -6,7 +6,15 @@ import type { Database } from "@/lib/types/database.types";
 
 type PayoutBatch = Database["public"]["Tables"]["payout_batches"]["Row"];
 
-export function PayoutBatchList({ batches }: { batches: PayoutBatch[] }) {
+export function PayoutBatchList({
+  batches,
+  jobNames,
+  currency,
+}: {
+  batches: PayoutBatch[];
+  jobNames: Map<string, string>;
+  currency: string;
+}) {
   if (batches.length === 0) {
     return (
       <Card className="items-center justify-center py-10 text-center">
@@ -23,15 +31,18 @@ export function PayoutBatchList({ batches }: { batches: PayoutBatch[] }) {
       {batches.map((batch) => (
         <Card key={batch.id} className="gap-1 py-4">
           <div className="flex items-center justify-between px-4">
-            <span className="font-medium">
-              {new Date(batch.paid_at).toLocaleDateString(undefined, {
-                month: "short",
-                day: "numeric",
-                year: "numeric",
-              })}
-            </span>
+            <div className="flex flex-col">
+              <span className="font-medium">{jobNames.get(batch.job_id) ?? "Job"}</span>
+              <span className="text-muted-foreground text-xs">
+                {new Date(batch.paid_at).toLocaleDateString(undefined, {
+                  month: "short",
+                  day: "numeric",
+                  year: "numeric",
+                })}
+              </span>
+            </div>
             <span className="text-finance font-semibold">
-              {formatCurrency(batch.total_amount, "AUD")}
+              {formatCurrency(batch.total_amount, currency)}
             </span>
           </div>
         </Card>

@@ -8,29 +8,24 @@
 // to `never`, which is caught at compile time (see the tsc error it produces)
 // rather than failing silently at runtime.
 
-export type ProfileRole = "ADMIN" | "PARTNER";
+export type ProfileRole = "OWNER" | "PARTNER";
 export type AccountType = "DIGITAL_WALLET" | "BANK" | "CASH";
-export type TransactionType = "EXPENSE" | "DEPOSIT" | "TRANSFER";
-export type DayOfWeekType = "WEEKDAY" | "SATURDAY" | "SUNDAY";
+export type TransactionType = "EXPENSE" | "DEPOSIT" | "TRANSFER" | "LOAN" | "REPAYMENT";
 export type PayoutStatusType = "PENDING" | "PAID";
+export type EmploymentType = "FULL_TIME" | "PART_TIME";
+export type PayType = "HOURLY" | "MONTHLY" | "BIWEEKLY";
+export type RecurringDirection = "INCOME" | "EXPENSE";
+export type LoanDirection = "LENT" | "BORROWED";
 export type ExpenseCategory =
   | "RENT"
-  | "SIM_PLAN"
-  | "GROCERIES"
   | "TRAVEL"
-  | "UTILITIES"
-  | "TRANSPORT"
-  | "DINING"
-  | "HEALTH"
+  | "PHONE_BILL"
+  | "GROCERIES"
   | "SHOPPING"
-  | "SUPPLEMENTS"
+  | "ENTERTAINMENT"
+  | "SUBSCRIPTIONS"
   | "OTHER";
 export type RecurringFrequency = "WEEKLY" | "BIWEEKLY" | "MONTHLY";
-
-export type RoomDetail = {
-  room: string;
-  credits: number;
-};
 
 export type Database = {
   public: {
@@ -94,6 +89,8 @@ export type Database = {
           category: ExpenseCategory | null;
           merchant_or_item: string | null;
           transaction_date: string;
+          loan_id: string | null;
+          job_id: string | null;
           created_at: string;
         };
         Insert: {
@@ -105,6 +102,8 @@ export type Database = {
           category?: ExpenseCategory | null;
           merchant_or_item?: string | null;
           transaction_date?: string;
+          loan_id?: string | null;
+          job_id?: string | null;
         };
         Update: Partial<{
           account_id: string;
@@ -116,16 +115,15 @@ export type Database = {
         }>;
         Relationships: [];
       };
-      recurring_bills: {
+      jobs: {
         Row: {
           id: string;
           user_id: string;
-          account_id: string;
-          label: string;
-          category: ExpenseCategory;
-          amount: number;
-          frequency: RecurringFrequency;
-          next_due_date: string;
+          name: string;
+          employment_type: EmploymentType;
+          pay_type: PayType;
+          hourly_rate: number | null;
+          deposit_account_id: string | null;
           is_active: boolean;
           created_at: string;
           updated_at: string;
@@ -133,115 +131,30 @@ export type Database = {
         Insert: {
           id?: string;
           user_id: string;
-          account_id: string;
-          label: string;
-          category?: ExpenseCategory;
-          amount: number;
-          frequency: RecurringFrequency;
-          next_due_date: string;
+          name: string;
+          employment_type: EmploymentType;
+          pay_type: PayType;
+          hourly_rate?: number | null;
+          deposit_account_id?: string | null;
           is_active?: boolean;
         };
         Update: Partial<{
-          account_id: string;
-          label: string;
-          category: ExpenseCategory;
-          amount: number;
-          frequency: RecurringFrequency;
-          next_due_date: string;
+          name: string;
+          employment_type: EmploymentType;
+          pay_type: PayType;
+          hourly_rate: number | null;
+          deposit_account_id: string | null;
           is_active: boolean;
         }>;
         Relationships: [];
       };
-      gym_exercises: {
+      job_shifts: {
         Row: {
           id: string;
-          name: string;
-          target_muscle: string | null;
-          machine_name: string | null;
-          created_at: string;
-        };
-        Insert: {
-          id?: string;
-          name: string;
-          target_muscle?: string | null;
-          machine_name?: string | null;
-        };
-        Update: Partial<{
-          name: string;
-          target_muscle: string | null;
-          machine_name: string | null;
-        }>;
-        Relationships: [];
-      };
-      gym_logs: {
-        Row: {
-          id: string;
-          user_id: string;
-          exercise_id: string;
-          weight_kg: number;
-          reps: number;
-          sets: number;
-          logged_at: string;
-          created_at: string;
-        };
-        Insert: {
-          id?: string;
-          user_id: string;
-          exercise_id: string;
-          weight_kg: number;
-          reps: number;
-          sets: number;
-          logged_at?: string;
-        };
-        Update: Partial<{
-          exercise_id: string;
-          weight_kg: number;
-          reps: number;
-          sets: number;
-          logged_at: string;
-        }>;
-        Relationships: [];
-      };
-      hotel_shifts: {
-        Row: {
-          id: string;
-          user_id: string;
-          shift_date: string;
-          day_of_week: DayOfWeekType;
-          rooms_cleaned: number;
-          total_credits: number;
-          base_hourly_rate: number;
-          calculated_pay: number;
-          room_details: RoomDetail[] | null;
-          payout_status: PayoutStatusType;
-          created_at: string;
-          updated_at: string;
-        };
-        Insert: {
-          id?: string;
-          user_id: string;
-          shift_date: string;
-          rooms_cleaned?: number;
-          total_credits: number;
-          room_details?: RoomDetail[] | null;
-          payout_status?: PayoutStatusType;
-        };
-        Update: Partial<{
-          shift_date: string;
-          rooms_cleaned: number;
-          total_credits: number;
-          room_details: RoomDetail[] | null;
-          payout_status: PayoutStatusType;
-        }>;
-        Relationships: [];
-      };
-      secondary_shifts: {
-        Row: {
-          id: string;
+          job_id: string;
           user_id: string;
           shift_date: string;
           hours_worked: number;
-          hourly_rate: number;
           calculated_pay: number;
           payout_status: PayoutStatusType;
           payout_batch_id: string | null;
@@ -250,17 +163,16 @@ export type Database = {
         };
         Insert: {
           id?: string;
+          job_id: string;
           user_id: string;
           shift_date: string;
-          hours_worked?: number;
-          hourly_rate?: number;
+          hours_worked: number;
           payout_status?: PayoutStatusType;
           payout_batch_id?: string | null;
         };
         Update: Partial<{
           shift_date: string;
           hours_worked: number;
-          hourly_rate: number;
           payout_status: PayoutStatusType;
           payout_batch_id: string | null;
         }>;
@@ -270,6 +182,7 @@ export type Database = {
         Row: {
           id: string;
           user_id: string;
+          job_id: string;
           paid_at: string;
           total_amount: number;
           note: string | null;
@@ -278,6 +191,7 @@ export type Database = {
         Insert: {
           id?: string;
           user_id: string;
+          job_id: string;
           paid_at?: string;
           total_amount?: number;
           note?: string | null;
@@ -289,24 +203,159 @@ export type Database = {
         }>;
         Relationships: [];
       };
+      recurring_transactions: {
+        Row: {
+          id: string;
+          user_id: string;
+          account_id: string;
+          job_id: string | null;
+          direction: RecurringDirection;
+          label: string;
+          category: ExpenseCategory | null;
+          amount: number;
+          frequency: RecurringFrequency;
+          next_due_date: string;
+          is_active: boolean;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          user_id: string;
+          account_id: string;
+          job_id?: string | null;
+          direction?: RecurringDirection;
+          label: string;
+          category?: ExpenseCategory | null;
+          amount: number;
+          frequency: RecurringFrequency;
+          next_due_date: string;
+          is_active?: boolean;
+        };
+        Update: Partial<{
+          account_id: string;
+          job_id: string | null;
+          direction: RecurringDirection;
+          label: string;
+          category: ExpenseCategory | null;
+          amount: number;
+          frequency: RecurringFrequency;
+          next_due_date: string;
+          is_active: boolean;
+        }>;
+        Relationships: [];
+      };
+      loans: {
+        Row: {
+          id: string;
+          user_id: string;
+          account_id: string;
+          counterparty_name: string;
+          direction: LoanDirection;
+          principal_amount: number;
+          loan_date: string;
+          due_date: string | null;
+          notes: string | null;
+          is_settled: boolean;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          user_id: string;
+          account_id: string;
+          counterparty_name: string;
+          direction: LoanDirection;
+          principal_amount: number;
+          loan_date?: string;
+          due_date?: string | null;
+          notes?: string | null;
+          is_settled?: boolean;
+        };
+        Update: Partial<{
+          counterparty_name: string;
+          due_date: string | null;
+          notes: string | null;
+          is_settled: boolean;
+        }>;
+        Relationships: [];
+      };
+      loan_repayments: {
+        Row: {
+          id: string;
+          loan_id: string;
+          user_id: string;
+          amount: number;
+          paid_date: string;
+          transaction_id: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          loan_id: string;
+          user_id: string;
+          amount: number;
+          paid_date?: string;
+          transaction_id?: string | null;
+        };
+        Update: Partial<{
+          amount: number;
+          paid_date: string;
+        }>;
+        Relationships: [];
+      };
     };
-    Views: Record<string, never>;
+    Views: {
+      loan_balances: {
+        Row: {
+          user_id: string;
+          counterparty_name: string;
+          net_outstanding: number;
+          has_open_loans: boolean;
+          latest_due_date: string | null;
+        };
+        Relationships: [];
+      };
+    };
     Functions: {
-      is_admin: {
+      is_owner: {
         Args: Record<PropertyKey, never>;
         Returns: boolean;
       };
-      mark_recurring_bill_paid: {
-        Args: { p_bill_id: string; p_paid_date?: string };
+      mark_recurring_transaction_paid: {
+        Args: { p_recurring_id: string; p_paid_date?: string };
         Returns: Database["public"]["Tables"]["transactions"]["Row"];
+      };
+      settle_job_shifts: {
+        Args: { p_job_id: string; p_paid_date?: string; p_note?: string | null };
+        Returns: Database["public"]["Tables"]["payout_batches"]["Row"];
+      };
+      create_loan: {
+        Args: {
+          p_account_id: string;
+          p_counterparty_name: string;
+          p_direction: LoanDirection;
+          p_principal_amount: number;
+          p_loan_date?: string;
+          p_due_date?: string | null;
+          p_notes?: string | null;
+        };
+        Returns: Database["public"]["Tables"]["loans"]["Row"];
+      };
+      repay_loan: {
+        Args: { p_loan_id: string; p_amount: number; p_paid_date?: string };
+        Returns: Database["public"]["Tables"]["loans"]["Row"];
       };
     };
     Enums: {
       profile_role: ProfileRole;
       account_type: AccountType;
       transaction_type: TransactionType;
-      day_of_week_type: DayOfWeekType;
       payout_status_type: PayoutStatusType;
+      employment_type: EmploymentType;
+      pay_type: PayType;
+      recurring_direction: RecurringDirection;
+      loan_direction: LoanDirection;
       expense_category: ExpenseCategory;
       recurring_frequency: RecurringFrequency;
     };

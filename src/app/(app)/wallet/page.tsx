@@ -7,7 +7,7 @@ import {
   getWalletAccountsData,
   getWalletTransactionsData,
   getWalletMonthTransactionsData,
-  getRecurringBillsData,
+  getRecurringTransactionsData,
   type TransactionFilters as TransactionFiltersType,
 } from "@/app/(app)/wallet/data";
 import { StatCard } from "@/components/dashboard/stat-card";
@@ -16,12 +16,12 @@ import { ChartSkeleton } from "@/components/skeletons/chart-skeleton";
 import { ListSkeleton } from "@/components/skeletons/list-skeleton";
 import { AccountCard } from "@/components/wallet/account-card";
 import { AccountForm } from "@/components/wallet/account-form";
-import { TransactionForm } from "@/components/wallet/transaction-form";
+import { QuickAddButton } from "@/components/wallet/quick-add-button";
+import { TransferForm } from "@/components/wallet/transfer-form";
 import { ConnectedTransactionList } from "@/components/wallet/connected-transaction-list";
-import { TransactionsProvider } from "@/components/wallet/transactions-provider";
 import { TransactionFilters } from "@/components/wallet/transaction-filters";
-import { RecurringBillForm } from "@/components/wallet/recurring-bill-form";
-import { RecurringBillList } from "@/components/wallet/recurring-bill-list";
+import { RecurringTransactionForm } from "@/components/wallet/recurring-transaction-form";
+import { RecurringTransactionList } from "@/components/wallet/recurring-transaction-list";
 import { CATEGORY_ORDER, CATEGORY_META } from "@/lib/wallet/categories";
 import { formatCurrency } from "@/lib/format";
 import type { ExpenseCategory } from "@/lib/types/database.types";
@@ -39,7 +39,6 @@ const CategorySpendChart = dynamic(
 export const metadata: Metadata = { title: "Wallet" };
 
 type WalletSearchParams = {
-  quick?: string;
   category?: string;
   from?: string;
   to?: string;
@@ -66,43 +65,36 @@ export default function WalletPage({
         </p>
       </div>
 
-      <TransactionsProvider>
-        <Suspense fallback={<WalletSummarySkeleton />}>
-          <WalletSummary searchParams={searchParams} />
+      <Suspense fallback={<WalletSummarySkeleton />}>
+        <WalletSummary />
+      </Suspense>
+
+      <section className="flex flex-col gap-3">
+        <h2 className="text-sm font-medium">Recurring</h2>
+        <Suspense fallback={<ListSkeleton rows={2} />}>
+          <WalletRecurringTransactions />
         </Suspense>
+      </section>
 
-        <section className="flex flex-col gap-3">
-          <h2 className="text-sm font-medium">Recurring bills</h2>
-          <Suspense fallback={<ListSkeleton rows={2} />}>
-            <WalletRecurringBills />
-          </Suspense>
-        </section>
-
-        <section className="flex flex-col gap-3">
-          <h2 className="text-sm font-medium">Recent transactions</h2>
-          <TransactionFilters />
-          <Suspense fallback={<ListSkeleton />}>
-            <WalletTransactions searchParams={searchParams} />
-          </Suspense>
-        </section>
-      </TransactionsProvider>
+      <section className="flex flex-col gap-3">
+        <h2 className="text-sm font-medium">Recent transactions</h2>
+        <TransactionFilters />
+        <Suspense fallback={<ListSkeleton />}>
+          <WalletTransactions searchParams={searchParams} />
+        </Suspense>
+      </section>
     </div>
   );
 }
 
-async function WalletSummary({
-  searchParams,
-}: {
-  searchParams: Promise<WalletSearchParams>;
-}) {
-  const { quick } = await searchParams;
+async function WalletSummary() {
   const { profile, user, accounts, profiles } = await getWalletAccountsData();
 
   const currency = profile?.currency_preference ?? "AUD";
-  const isAdmin = profile?.role === "ADMIN";
+  const isOwner = profile?.role === "OWNER";
 
   // Accounts don't carry their own currency column — each one's currency is
-  // implicitly its owner's profile.currency_preference. Needed so the ADMIN
+  // implicitly its owner's profile.currency_preference. Needed so the OWNER
   // (who can see the PARTNER's accounts too) doesn't render her AUD amounts
   // with an NPR label just because the viewer's own currency is NPR.
   const currencyByUserId = new Map(profiles.map((p) => [p.id, p.currency_preference]));
@@ -113,7 +105,7 @@ async function WalletSummary({
   const otherAccounts = accounts.filter((a) => a.user_id !== user?.id);
 
   // Net worth / month in / month out are scoped to the viewer's own
-  // accounts only — summing balances across the ADMIN's NPR accounts and
+  // accounts only — summing balances across the OWNER's NPR accounts and
   // the PARTNER's AUD accounts into one number would be financially
   // meaningless without an FX conversion this app doesn't do.
   const ownAccountIds = new Set(ownAccounts.map((a) => a.id));
@@ -140,8 +132,7 @@ async function WalletSummary({
 
   // Magnitude comparison ("which category did we spend most on"), so a
   // single-hue sorted bar chart is the right form here — same as
-  // BalanceChart above, not a pie/donut, and no per-category multi-hue
-  // palette (11 categories is already past a reasonable categorical size).
+  // BalanceChart above, not a pie/donut.
   const categoryTotals = new Map<ExpenseCategory, number>();
   ownMonthTx
     .filter((t) => t.type === "EXPENSE" && t.category)
@@ -155,6 +146,13 @@ async function WalletSummary({
   }))
     .filter((d) => d.amount > 0)
     .sort((a, b) => b.amount - a.amount);
+
+  const quickAddAccounts = myAccounts.map((a) => ({
+    id: a.id,
+    user_id: a.user_id,
+    account_name: a.account_name,
+    account_type: a.account_type,
+  }));
 
   return (
     <>
@@ -194,8 +192,9 @@ async function WalletSummary({
       ) : null}
 
       <div className="flex gap-2">
-        <AccountForm isAdmin={isAdmin} />
-        <TransactionForm accounts={accounts} defaultOpen={quick === "expense"} />
+        <QuickAddButton accounts={quickAddAccounts} currency={currency} />
+        <TransferForm accounts={myAccounts} />
+        <AccountForm isOwner={isOwner} />
       </div>
 
       {myAccounts.length > 0 ? (
@@ -219,7 +218,7 @@ async function WalletSummary({
       {otherAccounts.length > 0 ? (
         <section className="flex flex-col gap-3">
           <h2 className="text-sm font-medium">
-            {isAdmin ? "Partner's accounts" : "Shared accounts"}
+            {isOwner ? "Partner's accounts" : "Shared accounts"}
           </h2>
           {otherAccounts.map((a) => (
             <AccountCard
@@ -234,23 +233,23 @@ async function WalletSummary({
   );
 }
 
-async function WalletRecurringBills() {
-  const [{ accounts, user, profile }, bills] = await Promise.all([
+async function WalletRecurringTransactions() {
+  const [{ accounts, user, profile }, items] = await Promise.all([
     getWalletAccountsData(),
-    getRecurringBillsData(),
+    getRecurringTransactionsData(),
   ]);
   const currency = profile?.currency_preference ?? "AUD";
 
   const ownAccounts = accounts.filter((a) => a.user_id === user?.id);
-  const myBills = bills.filter((b) => b.user_id === user?.id);
-  const otherBills = bills.filter((b) => b.user_id !== user?.id);
+  const myItems = items.filter((b) => b.user_id === user?.id);
+  const otherItems = items.filter((b) => b.user_id !== user?.id);
 
   return (
     <>
-      <RecurringBillForm accounts={ownAccounts} />
-      <RecurringBillList bills={myBills} accounts={accounts} currency={currency} />
-      {otherBills.length > 0 ? (
-        <RecurringBillList bills={otherBills} accounts={accounts} currency={currency} />
+      <RecurringTransactionForm accounts={ownAccounts} />
+      <RecurringTransactionList items={myItems} accounts={accounts} currency={currency} />
+      {otherItems.length > 0 ? (
+        <RecurringTransactionList items={otherItems} accounts={accounts} currency={currency} />
       ) : null}
     </>
   );
@@ -295,7 +294,8 @@ function WalletSummarySkeleton() {
       <ChartSkeleton />
       <div className="flex gap-2">
         <div className="bg-muted h-12 w-32 animate-pulse rounded-lg" />
-        <div className="bg-muted h-12 w-40 animate-pulse rounded-lg" />
+        <div className="bg-muted h-12 w-32 animate-pulse rounded-lg" />
+        <div className="bg-muted h-12 w-32 animate-pulse rounded-lg" />
       </div>
     </div>
   );

@@ -1,5 +1,5 @@
 -- accounts: multi-account wallet system (digital wallets, banks, cash, and
--- flagged "parent" accounts that only the ADMIN can ever own/see).
+-- flagged "parent" accounts that only the OWNER can ever own/see).
 create table if not exists public.accounts (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null references auth.users (id) on delete cascade,

@@ -22,8 +22,8 @@ const TransactionsContext = createContext<ContextValue | null>(null);
 // only ever tracks entries added during the current pending transition,
 // overlaid on top of whatever real data TransactionList renders (see
 // ConnectedTransactionList). That decoupling is what lets it wrap two
-// independently-Suspense-streamed siblings (TransactionForm and the
-// transaction list resolve in separate boundaries, see wallet/page.tsx)
+// independently-Suspense-streamed siblings (QuickAddSheet/TransferForm and
+// the transaction list resolve in separate boundaries, see wallet/page.tsx)
 // without needing server data threaded through a client Context at the top
 // of the page. Once the enclosing transition settles (the real row has
 // streamed in via router.refresh()), React reverts this back to EMPTY on

@@ -27,11 +27,11 @@ export async function GET(request: NextRequest) {
   const from = searchParams.get("from");
   const to = searchParams.get("to");
   const q = searchParams.get("q");
-  // Household-wide export is opt-in and ADMIN-only — the default scope is
+  // Household-wide export is opt-in and OWNER-only — the default scope is
   // always the viewer's own transactions, for both roles. Unscoped export
-  // would otherwise mix the ADMIN's NPR and the PARTNER's AUD transactions
+  // would otherwise mix the OWNER's NPR and the PARTNER's AUD transactions
   // with no way to tell them apart.
-  const wantsAll = searchParams.get("scope") === "all" && profile?.role === "ADMIN";
+  const wantsAll = searchParams.get("scope") === "all" && profile?.role === "OWNER";
 
   let query = supabase
     .from("transactions")

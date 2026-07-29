@@ -4,7 +4,7 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Loader2, Plus } from "lucide-react";
 
-import { createSecondaryShift } from "@/app/(app)/work/actions";
+import { createJobShift } from "@/app/(app)/work/actions";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -15,96 +15,85 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import {
-  SECONDARY_SHIFT_DEFAULT_HOURS,
-  SECONDARY_SHIFT_DEFAULT_RATE,
-  calculateSecondaryShiftPay,
-} from "@/lib/calculations/shift-pay";
+import { calculateShiftPay } from "@/lib/calculations/job-pay";
 import { formatCurrency, todayLocalISO } from "@/lib/format";
 
-export function SecondaryShiftForm() {
+export function JobShiftForm({
+  jobId,
+  hourlyRate,
+}: {
+  jobId: string;
+  hourlyRate: number;
+}) {
   const [open, setOpen] = useState(false);
-  const [hours, setHours] = useState(SECONDARY_SHIFT_DEFAULT_HOURS);
-  const [rate, setRate] = useState(SECONDARY_SHIFT_DEFAULT_RATE);
+  const [shiftDate, setShiftDate] = useState(todayLocalISO());
+  const [hoursWorked, setHoursWorked] = useState(1);
   const [error, setError] = useState<string | undefined>();
   const [isPending, startTransition] = useTransition();
   const router = useRouter();
 
   function handleSubmit(formData: FormData) {
     startTransition(async () => {
-      const result = await createSecondaryShift({}, formData);
+      const result = await createJobShift({}, formData);
       if (result.error) {
         setError(result.error);
         return;
       }
       setError(undefined);
-      setHours(SECONDARY_SHIFT_DEFAULT_HOURS);
-      setRate(SECONDARY_SHIFT_DEFAULT_RATE);
+      setShiftDate(todayLocalISO());
+      setHoursWorked(1);
       setOpen(false);
       router.refresh();
     });
   }
 
-  const estimate = calculateSecondaryShiftPay(hours, rate);
-
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <Button variant="outline" onClick={() => setOpen(true)}>
-        <Plus className="size-4" />
-        Custom hours
+      <Button variant="shift" size="sm" onClick={() => setOpen(true)}>
+        <Plus className="size-3.5" />
+        Log hours
       </Button>
 
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Log secondary shift</DialogTitle>
+          <DialogTitle>Log hours</DialogTitle>
           <DialogDescription>
-            For anything other than the standard 2-hour / $25 shift.
+            Pay is calculated from this job&apos;s hourly rate automatically.
           </DialogDescription>
         </DialogHeader>
 
         <form action={handleSubmit} className="flex flex-col gap-4">
+          <input type="hidden" name="jobId" value={jobId} />
+
           <div className="grid gap-2">
-            <Label htmlFor="secondary-date">Shift date</Label>
+            <Label htmlFor="shift-date">Date</Label>
             <Input
-              id="secondary-date"
+              id="shift-date"
               name="shiftDate"
               type="date"
-              defaultValue={todayLocalISO()}
+              value={shiftDate}
+              onChange={(e) => setShiftDate(e.target.value)}
               max={todayLocalISO()}
             />
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
-            <div className="grid gap-2">
-              <Label htmlFor="hours-worked">Hours worked</Label>
-              <Input
-                id="hours-worked"
-                name="hoursWorked"
-                type="number"
-                step="0.25"
-                min="0.25"
-                value={hours}
-                onChange={(e) => setHours(Number(e.target.value) || 0)}
-              />
-            </div>
-            <div className="grid gap-2">
-              <Label htmlFor="hourly-rate">Hourly rate</Label>
-              <Input
-                id="hourly-rate"
-                name="hourlyRate"
-                type="number"
-                step="0.5"
-                min="0"
-                value={rate}
-                onChange={(e) => setRate(Number(e.target.value) || 0)}
-              />
-            </div>
+          <div className="grid gap-2">
+            <Label htmlFor="hours-worked">Hours worked</Label>
+            <Input
+              id="hours-worked"
+              name="hoursWorked"
+              type="number"
+              step="0.25"
+              min="0.25"
+              value={hoursWorked}
+              onChange={(e) => setHoursWorked(Number(e.target.value) || 0)}
+            />
           </div>
 
           <div className="bg-shift/10 flex items-center justify-between rounded-xl p-4 text-sm">
             <span className="text-muted-foreground">Estimated pay</span>
             <span className="text-shift text-base font-semibold">
-              {formatCurrency(estimate, "AUD")}
+              {formatCurrency(calculateShiftPay(hoursWorked, hourlyRate), "AUD")}
             </span>
           </div>
 

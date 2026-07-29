@@ -77,10 +77,10 @@ export const getWalletMonthTransactionsData = cache(async () => {
   return data ?? [];
 });
 
-export const getRecurringBillsData = cache(async () => {
+export const getRecurringTransactionsData = cache(async () => {
   const supabase = await createClient();
   const { data } = await supabase
-    .from("recurring_bills")
+    .from("recurring_transactions")
     .select("*")
     .eq("is_active", true)
     .order("next_due_date", { ascending: true });

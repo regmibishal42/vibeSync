@@ -3,21 +3,22 @@
 import { useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { differenceInCalendarDays } from "date-fns";
-import { Loader2 } from "lucide-react";
+import { Loader2, TrendingUp } from "lucide-react";
 import { toast } from "sonner";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { markRecurringBillPaid } from "@/app/(app)/wallet/recurring-actions";
+import { markRecurringTransactionPaid } from "@/app/(app)/wallet/recurring-actions";
 import { formatCurrency, todayLocalISO } from "@/lib/format";
 import { CATEGORY_META } from "@/lib/wallet/categories";
-import type { ExpenseCategory } from "@/lib/types/database.types";
+import type { ExpenseCategory, RecurringDirection } from "@/lib/types/database.types";
 
 export type UpcomingBill = {
   id: string;
   label: string;
-  category: ExpenseCategory;
+  category: ExpenseCategory | null;
+  direction: RecurringDirection;
   amount: number;
   next_due_date: string;
   accountName: string;
@@ -52,10 +53,11 @@ export function UpcomingBillsWidget({
 
   return (
     <section className="flex flex-col gap-3">
-      <h2 className="text-sm font-medium">Upcoming bills</h2>
+      <h2 className="text-sm font-medium">Upcoming</h2>
       <div className="flex flex-col gap-2">
         {bills.map((bill) => {
-          const Icon = CATEGORY_META[bill.category].icon;
+          const isIncome = bill.direction === "INCOME";
+          const Icon = bill.category ? CATEGORY_META[bill.category].icon : TrendingUp;
           const daysUntil = differenceInCalendarDays(
             new Date(`${bill.next_due_date}T00:00:00`),
             today
@@ -64,13 +66,20 @@ export function UpcomingBillsWidget({
 
           return (
             <Card key={bill.id} className="flex-row items-center gap-3 px-4 py-3">
-              <span className="bg-warning/15 text-warning flex size-9 shrink-0 items-center justify-center rounded-lg">
+              <span
+                className={
+                  isIncome
+                    ? "bg-shift/15 text-shift flex size-9 shrink-0 items-center justify-center rounded-lg"
+                    : "bg-warning/15 text-warning flex size-9 shrink-0 items-center justify-center rounded-lg"
+                }
+              >
                 <Icon className="size-4" />
               </span>
               <div className="flex flex-1 flex-col overflow-hidden">
                 <span className="truncate font-medium">{bill.label}</span>
                 <span className="text-muted-foreground truncate text-xs">
-                  {bill.accountName} · {formatCurrency(bill.amount, currency)}
+                  {bill.accountName} · {isIncome ? "+" : "−"}
+                  {formatCurrency(bill.amount, currency)}
                 </span>
               </div>
               <Badge variant={variant}>{label}</Badge>
@@ -89,12 +98,12 @@ function MarkPaidButton({ billId }: { billId: string }) {
 
   function handleClick() {
     startTransition(async () => {
-      const result = await markRecurringBillPaid(billId);
+      const result = await markRecurringTransactionPaid(billId);
       if (result.error) {
         toast.error(result.error);
         return;
       }
-      toast.success("Bill marked paid");
+      toast.success("Marked paid");
       router.refresh();
     });
   }

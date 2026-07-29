@@ -6,27 +6,20 @@ import {
   ChartContainer,
   ChartTooltip,
   ChartTooltipContent,
-  ChartLegend,
-  ChartLegendContent,
   type ChartConfig,
 } from "@/components/ui/chart";
 
 const chartConfig = {
-  hotel: { label: "Hotel", color: "var(--shift)" },
-  secondary: { label: "Secondary", color: "color-mix(in oklch, var(--shift) 55%, transparent)" },
+  pay: { label: "Hourly pay", color: "var(--shift)" },
 } satisfies ChartConfig;
 
-export function EarningsChart({
-  data,
-}: {
-  data: { date: string; hotel: number; secondary: number }[];
-}) {
-  const hasData = data.some((d) => d.hotel > 0 || d.secondary > 0);
+export function EarningsChart({ data }: { data: { date: string; pay: number }[] }) {
+  const hasData = data.some((d) => d.pay > 0);
 
   if (!hasData) {
     return (
       <div className="text-muted-foreground flex h-40 items-center justify-center text-sm">
-        Log a shift to see your earnings trend.
+        Log an hourly shift to see your earnings trend.
       </div>
     );
   }
@@ -43,19 +36,7 @@ export function EarningsChart({
           interval="preserveStartEnd"
         />
         <ChartTooltip content={<ChartTooltipContent indicator="dot" />} />
-        <ChartLegend content={<ChartLegendContent />} />
-        <Bar
-          dataKey="hotel"
-          stackId="earnings"
-          fill="var(--color-hotel)"
-          radius={[0, 0, 4, 4]}
-        />
-        <Bar
-          dataKey="secondary"
-          stackId="earnings"
-          fill="var(--color-secondary)"
-          radius={[4, 4, 0, 0]}
-        />
+        <Bar dataKey="pay" fill="var(--color-pay)" radius={[4, 4, 0, 0]} />
       </BarChart>
     </ChartContainer>
   );

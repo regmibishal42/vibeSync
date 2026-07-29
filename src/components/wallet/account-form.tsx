@@ -23,7 +23,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 
-export function AccountForm({ isAdmin }: { isAdmin: boolean }) {
+export function AccountForm({ isOwner }: { isOwner: boolean }) {
   const [open, setOpen] = useState(false);
   const [accountType, setAccountType] = useState("DIGITAL_WALLET");
   const [error, setError] = useState<string | undefined>();
@@ -96,7 +96,7 @@ export function AccountForm({ isAdmin }: { isAdmin: boolean }) {
             />
           </div>
 
-          {isAdmin ? (
+          {isOwner ? (
             <label className="flex items-center gap-2 text-sm">
               <input type="checkbox" name="isParentAccount" className="size-4" />
               This is a parent&apos;s account

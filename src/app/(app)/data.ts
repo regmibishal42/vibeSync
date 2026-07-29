@@ -3,12 +3,7 @@ import { cache } from "react";
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentProfile, getCurrentUser } from "@/lib/supabase/profile";
 
-// cache()-wrapped so HomeHero and HomeStats (two sibling <Suspense>
-// boundaries in page.tsx that both need "my own accounts") share one
-// Supabase round trip instead of double-querying — React's cache() dedupes
-// by function identity per request, not just the already-cache()-wrapped
-// getCurrentProfile/getCurrentUser calls inside it.
-export const getHomeAccountsData = cache(async () => {
+export const getDashboardAccountsData = cache(async () => {
   const [profile, user, supabase] = await Promise.all([
     getCurrentProfile(),
     getCurrentUser(),
@@ -19,36 +14,57 @@ export const getHomeAccountsData = cache(async () => {
   return { profile, user, accounts: accounts ?? [] };
 });
 
-// Explicitly scoped to `user_id = user.id`, NOT the raw is_admin()-bypassed
-// fetch used elsewhere — the ADMIN's home page must show only his own
-// upcoming bills, never the PARTNER's rent mixed into his own view.
-export const getHomeUpcomingBillsData = cache(async () => {
-  const [user, supabase] = await Promise.all([getCurrentUser(), createClient()]);
-  if (!user) return [];
+// 90 days is enough headroom for both the "this week"/"this month" toggle
+// and the 14-day earnings-style charts without scanning full history on
+// every dashboard load.
+export const getDashboardTransactionsData = cache(async () => {
+  const supabase = await createClient();
+  const since = new Date();
+  since.setDate(since.getDate() - 90);
 
   const { data } = await supabase
-    .from("recurring_bills")
+    .from("transactions")
     .select("*")
-    .eq("user_id", user.id)
-    .eq("is_active", true)
-    .order("next_due_date", { ascending: true })
-    .limit(3);
+    .gte("transaction_date", since.toISOString());
 
   return data ?? [];
 });
 
-export const getHomeActivityData = cache(async () => {
+export const getDashboardJobsData = cache(async () => {
   const supabase = await createClient();
-  const [{ data: hotelShifts }, { data: secondaryShifts }, { data: gymLogs }] =
-    await Promise.all([
-      supabase.from("hotel_shifts").select("*"),
-      supabase.from("secondary_shifts").select("*"),
-      supabase.from("gym_logs").select("*"),
-    ]);
+  const since = new Date();
+  since.setDate(since.getDate() - 90);
 
-  return {
-    hotelShifts: hotelShifts ?? [],
-    secondaryShifts: secondaryShifts ?? [],
-    gymLogs: gymLogs ?? [],
-  };
+  const [{ data: jobs }, { data: shifts }] = await Promise.all([
+    supabase.from("jobs").select("*"),
+    supabase
+      .from("job_shifts")
+      .select("*")
+      .gte("shift_date", since.toISOString().slice(0, 10)),
+  ]);
+
+  return { jobs: jobs ?? [], shifts: shifts ?? [] };
+});
+
+// Explicitly scoped to `user_id = user.id`, NOT the raw is_owner()-bypassed
+// fetch used elsewhere — each person's home page shows only their own
+// upcoming bills/salary, never mixed with the other's.
+export const getDashboardRecurringData = cache(async () => {
+  const [user, supabase] = await Promise.all([getCurrentUser(), createClient()]);
+  if (!user) return [];
+
+  const { data } = await supabase
+    .from("recurring_transactions")
+    .select("*")
+    .eq("user_id", user.id)
+    .eq("is_active", true)
+    .order("next_due_date", { ascending: true });
+
+  return data ?? [];
+});
+
+export const getDashboardLoanBalancesData = cache(async () => {
+  const supabase = await createClient();
+  const { data } = await supabase.from("loan_balances").select("*");
+  return data ?? [];
 });

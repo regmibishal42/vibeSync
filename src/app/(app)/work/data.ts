@@ -3,25 +3,30 @@ import { cache } from "react";
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentProfile } from "@/lib/supabase/profile";
 
-// hotel_shifts + secondary_shifts are always consumed together (stat cards,
-// the 14-day chart, and both the Hotel/Secondary tabs all need both) — one
-// fetcher, one <Suspense> boundary. payout_batches is only rendered inside
-// the Payouts tab and gets its own boundary/fetcher below.
-export const getWorkShiftsData = cache(async () => {
+// jobs + job_shifts + linked salary schedules are always consumed together
+// (stat cards, the chart, and every job card need all three) — one fetcher,
+// one <Suspense> boundary. payout_batches gets its own boundary below since
+// it's only rendered inside the Payouts tab.
+export const getJobsData = cache(async () => {
   const [profile, supabase] = await Promise.all([getCurrentProfile(), createClient()]);
-  const [{ data: hotelShifts }, { data: secondaryShifts }] = await Promise.all([
-    supabase.from("hotel_shifts").select("*").order("shift_date", { ascending: false }).limit(60),
-    supabase
-      .from("secondary_shifts")
-      .select("*")
-      .order("shift_date", { ascending: false })
-      .limit(60),
-  ]);
+  const [{ data: jobs }, { data: shifts }, { data: salaries }, { data: accounts }] =
+    await Promise.all([
+      supabase.from("jobs").select("*").order("created_at", { ascending: true }),
+      supabase
+        .from("job_shifts")
+        .select("*")
+        .order("shift_date", { ascending: false })
+        .limit(120),
+      supabase.from("recurring_transactions").select("*").eq("direction", "INCOME"),
+      supabase.from("accounts").select("id, account_name").order("account_name"),
+    ]);
 
   return {
     profile,
-    hotel: hotelShifts ?? [],
-    secondary: secondaryShifts ?? [],
+    jobs: jobs ?? [],
+    shifts: shifts ?? [],
+    salaries: salaries ?? [],
+    accounts: accounts ?? [],
   };
 });
 
