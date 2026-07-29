@@ -153,6 +153,27 @@ while the app is open) without that platform gap.
 
 ## Design notes for the curious
 
+### Why `'use cache: private'` instead of plain `'use cache'`
+
+Every `data.ts` fetcher (`wallet/data.ts`, `work/data.ts`, `loans/data.ts`,
+the dashboard's `data.ts`) is `'use cache: private'` with `cacheLife('seconds')`
+(30s client stale / 1s revalidate). Plain `'use cache'` can't call
+`cookies()`/`headers()`, which the Supabase server client needs for the
+session — and even if it could, its result is a **shared** server-side
+cache, wrong for RLS-scoped per-user data. `'use cache: private'` is cached
+only in that browser's own memory, never written to a shared store, so
+there's no cross-user leak surface at all — OWNER and PARTNER each just have
+their own independent in-memory cache. Practical effect: switching between
+Home/Work/Wallet/Loans and coming back within ~30s is instant (no network
+round trip), while every mutating Server Action's existing `revalidatePath`
+call clears the *entire* client cache immediately per Next's documented
+behavior — so a save on this device is never masked by the window. A hard
+reload always re-executes against Supabase fresh, since private-cache
+functions are excluded from static-shell prerendering. The only residual
+staleness is cross-device (a change on one phone can take up to 30s to show
+on the other's already-open tab) — inherent to any client cache without a
+push channel, and tight enough not to matter for two people's finances.
+
 ### Why hand-authored UI components
 
 This environment's Node runtime can't complete a TLS handshake with

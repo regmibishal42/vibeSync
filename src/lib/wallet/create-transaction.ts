@@ -1,6 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
-import type { Database, ExpenseCategory } from "@/lib/types/database.types";
+import type { AccountType, Database, ExpenseCategory } from "@/lib/types/database.types";
 
 // Shared by createTransaction (wallet/actions.ts, the full dialog's Server
 // Action) and the /api/wallet/quick-add route (the amount-first quick-add
@@ -50,4 +50,21 @@ export async function insertSignedTransaction(
   });
 
   return error ? { error: error.message } : {};
+}
+
+// Shared by createTransaction's TRANSFER branch (server) and TransferForm's
+// optimistic rows (client) so a BANK->CASH or CASH->BANK move — an ATM
+// withdrawal or a cash deposit — reads like a real bank statement line
+// instead of generic "Transfer out"/"Transfer in" on both legs.
+export function transferLabels(
+  sourceType: AccountType,
+  destinationType: AccountType
+): { out: string; in: string } {
+  if (sourceType === "BANK" && destinationType === "CASH") {
+    return { out: "Cash Withdrawal", in: "Cash Withdrawal" };
+  }
+  if (sourceType === "CASH" && destinationType === "BANK") {
+    return { out: "Cash Deposit", in: "Cash Deposit" };
+  }
+  return { out: "Transfer out", in: "Transfer in" };
 }

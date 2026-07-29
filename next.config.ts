@@ -1,11 +1,14 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  // Every route reads per-user/RLS-scoped data, so no `'use cache'` is used
-  // anywhere in this app — the value here is Partial Prerendering (every
-  // dynamic access is now wrapped in <Suspense>, see src/app/(app)/**),
-  // React's <Activity>-based state preservation across client-side nav, and
-  // /login prerendering fully static (see unstable_instant below).
+  // Every route reads per-user/RLS-scoped data, so plain (shared) `'use
+  // cache'` is never used — every data.ts fetcher instead uses `'use cache:
+  // private'` (browser-memory only, never persisted server-side, so no
+  // cross-user leak risk) for instant tab-switch/back-nav. Also gives
+  // Partial Prerendering (every dynamic access wrapped in <Suspense>, see
+  // src/app/(app)/**), React's <Activity>-based state preservation across
+  // client-side nav, and /login prerendering fully static (see
+  // unstable_instant below).
   cacheComponents: true,
   experimental: {
     // Dev-only DevTools panel for inspecting the static-shell/streaming

@@ -4,18 +4,26 @@ import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { RepayForm } from "@/components/loans/repay-form";
 import { formatCurrency, todayLocalISO } from "@/lib/format";
-import type { Database } from "@/lib/types/database.types";
+import type { AccountType, Database } from "@/lib/types/database.types";
 
 type Loan = Database["public"]["Tables"]["loans"]["Row"];
+type LoanAccount = {
+  id: string;
+  user_id: string;
+  account_name: string;
+  account_type: AccountType;
+};
 
 export function LoanCard({
   loan,
   repaid,
   currency,
+  accounts,
 }: {
   loan: Loan;
   repaid: number;
   currency: string;
+  accounts: LoanAccount[];
 }) {
   const remaining = Math.max(loan.principal_amount - repaid, 0);
   const isOverdue =
@@ -62,7 +70,13 @@ export function LoanCard({
 
       {!loan.is_settled ? (
         <div className="px-4">
-          <RepayForm loanId={loan.id} remaining={remaining} currency={currency} />
+          <RepayForm
+            loanId={loan.id}
+            remaining={remaining}
+            currency={currency}
+            defaultAccountId={loan.account_id}
+            accounts={accounts.filter((a) => a.user_id === loan.user_id)}
+          />
         </div>
       ) : null}
     </Card>

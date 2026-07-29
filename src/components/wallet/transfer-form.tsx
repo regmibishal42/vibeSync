@@ -23,6 +23,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { ACCOUNT_TYPE_ICON } from "@/lib/wallet/account-type";
+import { transferLabels } from "@/lib/wallet/create-transaction";
 import { todayLocalISO } from "@/lib/format";
 import type { Database } from "@/lib/types/database.types";
 import {
@@ -43,11 +44,18 @@ export function TransferForm({ accounts }: { accounts: Account[] }) {
   const router = useRouter();
   const { addOptimistic } = useTransactionsOptimistic();
 
+  const source = accounts.find((a) => a.id === accountId);
+  const destination = accounts.find((a) => a.id === destinationAccountId);
+  const labels =
+    source && destination
+      ? transferLabels(source.account_type, destination.account_type)
+      : { out: "Transfer out", in: "Transfer in" };
+  const isWithdrawal = labels.out === "Cash Withdrawal";
+  const isDeposit = labels.out === "Cash Deposit";
+
   function handleSubmit(formData: FormData) {
     const amount = Number(formData.get("amount"));
     const transactionDate = formData.get("transactionDate") as string;
-    const source = accounts.find((a) => a.id === accountId);
-    const destination = accounts.find((a) => a.id === destinationAccountId);
 
     const out: OptimisticTransaction = {
       id: crypto.randomUUID(),
@@ -56,7 +64,7 @@ export function TransferForm({ accounts }: { accounts: Account[] }) {
       amount: -Math.abs(amount),
       type: "TRANSFER",
       category: null,
-      merchant_or_item: "Transfer out",
+      merchant_or_item: labels.out,
       transaction_date: transactionDate,
       loan_id: null,
       job_id: null,
@@ -70,7 +78,7 @@ export function TransferForm({ accounts }: { accounts: Account[] }) {
       amount: Math.abs(amount),
       type: "TRANSFER",
       category: null,
-      merchant_or_item: "Transfer in",
+      merchant_or_item: labels.in,
       transaction_date: transactionDate,
       loan_id: null,
       job_id: null,
@@ -101,9 +109,15 @@ export function TransferForm({ accounts }: { accounts: Account[] }) {
 
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Transfer between accounts</DialogTitle>
+          <DialogTitle>
+            {isWithdrawal ? "Withdraw cash" : isDeposit ? "Deposit cash" : "Transfer between accounts"}
+          </DialogTitle>
           <DialogDescription>
-            Move money from one of your accounts to another.
+            {isWithdrawal
+              ? "Pull cash out of a bank account — logged as a Cash Withdrawal on both sides."
+              : isDeposit
+                ? "Put cash into a bank account — logged as a Cash Deposit on both sides."
+                : "Move money from one of your accounts to another."}
           </DialogDescription>
         </DialogHeader>
 
@@ -183,7 +197,7 @@ export function TransferForm({ accounts }: { accounts: Account[] }) {
             disabled={isPending || !accountId || accountId === destinationAccountId}
           >
             {isPending ? <Loader2 className="size-4 animate-spin" /> : null}
-            Transfer
+            {isWithdrawal ? "Withdraw" : isDeposit ? "Deposit" : "Transfer"}
           </Button>
         </form>
       </DialogContent>
