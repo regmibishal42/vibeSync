@@ -24,6 +24,8 @@ export type ExpenseCategory =
   | "SHOPPING"
   | "ENTERTAINMENT"
   | "SUBSCRIPTIONS"
+  | "FUEL"
+  | "INVESTMENT"
   | "OTHER";
 export type RecurringFrequency = "WEEKLY" | "BIWEEKLY" | "MONTHLY";
 

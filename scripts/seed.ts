@@ -115,6 +115,11 @@ async function main() {
     account_type: "BANK",
     starting_balance: 800,
   });
+  await ensureAccount(supabase, userIds.PARTNER, {
+    account_name: "Cash",
+    account_type: "CASH",
+    starting_balance: 100,
+  });
 
   const ownerBank = await getAccountId(supabase, userIds.OWNER, "Nabil Bank");
   await ensureJob(supabase, userIds.OWNER, {

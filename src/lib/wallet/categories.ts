@@ -6,6 +6,8 @@ import {
   ShoppingBag,
   Clapperboard,
   Repeat,
+  Fuel,
+  LineChart,
   MoreHorizontal,
   type LucideIcon,
 } from "lucide-react";
@@ -18,21 +20,25 @@ import type { ExpenseCategory } from "@/lib/types/database.types";
 export const CATEGORY_ORDER: ExpenseCategory[] = [
   "RENT",
   "TRAVEL",
+  "FUEL",
   "PHONE_BILL",
   "GROCERIES",
   "SHOPPING",
   "ENTERTAINMENT",
   "SUBSCRIPTIONS",
+  "INVESTMENT",
   "OTHER",
 ];
 
 export const CATEGORY_META: Record<ExpenseCategory, { label: string; icon: LucideIcon }> = {
   RENT: { label: "Rent", icon: Home },
   TRAVEL: { label: "Travel", icon: Plane },
+  FUEL: { label: "Fuel", icon: Fuel },
   PHONE_BILL: { label: "Phone bill", icon: Smartphone },
   GROCERIES: { label: "Groceries", icon: ShoppingCart },
   SHOPPING: { label: "Shopping", icon: ShoppingBag },
   ENTERTAINMENT: { label: "Entertainment", icon: Clapperboard },
   SUBSCRIPTIONS: { label: "Subscriptions", icon: Repeat },
+  INVESTMENT: { label: "Investment", icon: LineChart },
   OTHER: { label: "Other", icon: MoreHorizontal },
 };
