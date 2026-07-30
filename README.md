@@ -47,6 +47,10 @@ reference, and architecture deep-dive; this README stays a quick-start.
 npm install
 ```
 
+Useful scripts: `npm run dev`, `npm run build`, `npm run lint`, and
+`npm run check` (assertion self-check over the pure money/date logic —
+period bucketing, LIKE escaping, currency grouping, pay rounding).
+
 ### 2. Create a Supabase project
 
 Free tier, at [supabase.com](https://supabase.com/dashboard). Once created,
@@ -59,7 +63,7 @@ grab three values from **Project Settings → API**:
 ### 3. Run the migrations
 
 In the Supabase dashboard's **SQL Editor**, run each file in
-`supabase/migrations/` **in order** (`0001_...` through `0011_...`), or use
+`supabase/migrations/` **in order** (`0001_...` through `0012_...`), or use
 the Supabase CLI:
 
 > **If you're retrying after a partial failure**: an interrupted earlier run
@@ -91,12 +95,11 @@ emails/passwords/display names — those are read by `scripts/seed.ts`.
 npm run seed
 ```
 
-Idempotent — safe to re-run. Creates the OWNER and PARTNER auth users
-(there's no public sign-up route; this script is the only way in), their
-`profiles` rows, a few starter accounts (Khalti, eSewa, Nabil Bank, a cash
-wallet, a flagged parents' account, and a Sydney bank account for the
-partner), two sample jobs (one hourly, one monthly-salary), a couple of
-recurring bills/salary schedules, and one sample loan.
+Idempotent — safe to re-run. Creates only the OWNER and PARTNER auth users
+(there's no public sign-up route; this script is the only way in) and their
+`profiles` rows — deliberately no sample accounts/jobs/loans, so the app
+starts genuinely empty. Add real accounts, jobs, and loans from inside the
+app itself after logging in.
 
 **Change both passwords after first login.**
 
@@ -124,6 +127,22 @@ leg on the destination — so the balance trigger
 (`supabase/migrations/0004_transactions.sql`) never needs to special-case
 transaction types: `accounts.current_balance` is always recomputed as
 `starting_balance + SUM(amount)` after every write.
+
+Mistakes are fixable: a transaction can be deleted from the wallet list.
+That runs through `delete_transaction()` rather than a plain DELETE, because
+a transfer has to lose **both** legs at once (they share a
+`transfer_group_id`) or two accounts end up permanently out of balance, and
+loan-owned rows have to be refused so `loans.is_settled` never starts lying.
+See [_Ledger integrity guarantees_](./DOCUMENTATION.md#ledger-integrity-guarantees)
+for the full list of what's enforced at the database layer.
+
+`formatCurrency()` (`src/lib/format.ts`) picks its `Intl.NumberFormat`
+locale from the currency, not a fixed one: NPR renders lakh/crore-grouped
+(`Rs 12,34,567.50` — thousands, then every 2 digits) via the `en-IN`
+locale, while every other currency (AUD, USD, ...) stays Western-grouped
+(`$1,234,567.50`) via `en-US`. Same plain 0-9 digits either way — only the
+grouping rule changes, which is why it's `en-IN` and not `ne-NP` (that
+locale would also switch to Devanagari numerals).
 
 Jobs are generic (`0006_jobs.sql`): any number per user, each either
 `FULL_TIME`/`PART_TIME` and paid `HOURLY`/`MONTHLY`/`BIWEEKLY`. Hourly jobs

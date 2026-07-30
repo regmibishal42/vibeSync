@@ -53,7 +53,10 @@ export async function flushQuickAddQueue(): Promise<{ flushed: number; remaining
       const res = await fetch("/api/wallet/quick-add", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(entry),
+        // queueId doubles as clientId so a retry of an entry that actually
+        // landed (but whose response was lost) is absorbed server-side as a
+        // no-op instead of posting the expense a second time.
+        body: JSON.stringify({ ...entry, clientId: entry.queueId }),
       });
       if (res.ok) {
         flushed++;

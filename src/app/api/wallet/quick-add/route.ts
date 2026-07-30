@@ -21,6 +21,10 @@ const quickAddSchema = z.object({
   category: z.enum(categoryEnum).optional(),
   merchantOrItem: z.string().optional(),
   transactionDate: z.string().min(1),
+  // Client-generated, stable across retries of the *same* queued entry —
+  // this is what makes an offline replay idempotent instead of a duplicate
+  // expense (see insertSignedTransaction's 23505 handling).
+  clientId: z.string().min(1).max(64).optional(),
 });
 
 export async function POST(request: Request) {

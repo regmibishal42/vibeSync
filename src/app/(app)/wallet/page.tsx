@@ -107,8 +107,10 @@ async function WalletSummary() {
   // Net worth / month in / month out are scoped to the viewer's own
   // accounts only — summing balances across the OWNER's NPR accounts and
   // the PARTNER's AUD accounts into one number would be financially
-  // meaningless without an FX conversion this app doesn't do.
-  const ownAccountIds = new Set(ownAccounts.map((a) => a.id));
+  // meaningless without an FX conversion this app doesn't do. Parent
+  // accounts are excluded too (they're listed separately below): they're
+  // money this user administers, not money they own.
+  const ownAccountIds = new Set(myAccounts.map((a) => a.id));
   // Unbounded-by-recency (unlike the 50-row "recent transactions" list) so
   // month stats and the category chart below don't silently under-count
   // once monthly volume exceeds 50.
@@ -117,7 +119,7 @@ async function WalletSummary() {
     .filter((t) => ownAccountIds.has(t.account_id))
     .filter((t) => isThisMonth(t.transaction_date));
 
-  const netWorth = ownAccounts.reduce((sum, a) => sum + a.current_balance, 0);
+  const netWorth = myAccounts.reduce((sum, a) => sum + a.current_balance, 0);
   const monthIncome = ownMonthTx
     .filter((t) => t.amount > 0)
     .reduce((sum, t) => sum + t.amount, 0);

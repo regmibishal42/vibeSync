@@ -5,6 +5,7 @@ import { cn } from "@/lib/utils";
 import { formatCurrency } from "@/lib/format";
 import { ACCOUNT_TYPE_ICON } from "@/lib/wallet/account-type";
 import { CATEGORY_META } from "@/lib/wallet/categories";
+import { DeleteTransactionButton } from "@/components/wallet/delete-transaction-button";
 import type { Database } from "@/lib/types/database.types";
 
 type Transaction = Database["public"]["Tables"]["transactions"]["Row"] & {
@@ -76,16 +77,28 @@ export function TransactionList({
               {tx._pending ? (
                 <Loader2 className="text-muted-foreground size-4 shrink-0 animate-spin" />
               ) : (
-                <span
-                  className={
-                    isInflow
-                      ? "text-finance shrink-0 font-semibold"
-                      : "text-foreground shrink-0 font-semibold"
-                  }
-                >
-                  {isInflow ? "+" : "−"}
-                  {formatCurrency(Math.abs(tx.amount), currency)}
-                </span>
+                <>
+                  <span
+                    className={
+                      isInflow
+                        ? "text-finance shrink-0 font-semibold"
+                        : "text-foreground shrink-0 font-semibold"
+                    }
+                  >
+                    {isInflow ? "+" : "−"}
+                    {formatCurrency(Math.abs(tx.amount), currency)}
+                  </span>
+                  <DeleteTransactionButton
+                    transactionId={tx.id}
+                    type={tx.type}
+                    amount={tx.amount}
+                    label={
+                      tx.merchant_or_item ||
+                      (tx.category ? CATEGORY_META[tx.category].label : tx.type)
+                    }
+                    currency={currency}
+                  />
+                </>
               )}
             </div>
           </Card>

@@ -91,6 +91,8 @@ export function QuickAddSheet({
       transaction_date: transactionDate,
       loan_id: null,
       job_id: null,
+      transfer_group_id: null,
+      client_id: null,
       created_at: new Date().toISOString(),
       _pending: true,
     };
@@ -119,7 +121,7 @@ export function QuickAddSheet({
         const res = await fetch("/api/wallet/quick-add", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(payload),
+          body: JSON.stringify({ ...payload, clientId: payload.queueId }),
         });
         if (!res.ok) throw new Error();
         toast.success(`${savedType === "EXPENSE" ? "Expense" : "Income"} saved`);

@@ -15,14 +15,24 @@ export function todayLocalISO(): string {
 
 const currencyFormatters = new Map<string, Intl.NumberFormat>();
 
+// NPR groups digits lakh/crore-style (12,34,567 — thousands, then every 2
+// digits), not the Western every-3-digits grouping (1,234,567) every other
+// currency here uses. Same plain 0-9 digits either way (not Devanagari) —
+// only the locale's grouping rule changes, so `en-IN` is the right choice
+// over `ne-NP` (which would also switch the numerals themselves).
+function localeForCurrency(currency: string): string {
+  return currency === "NPR" ? "en-IN" : "en-US";
+}
+
 export function formatCurrency(amount: number, currency: string): string {
   let formatter = currencyFormatters.get(currency);
   if (!formatter) {
-    formatter = new Intl.NumberFormat("en-US", {
+    formatter = new Intl.NumberFormat(localeForCurrency(currency), {
       style: "currency",
       currency,
       currencyDisplay: "narrowSymbol",
       maximumFractionDigits: 2,
+      minimumFractionDigits: 2,
     });
     currencyFormatters.set(currency, formatter);
   }

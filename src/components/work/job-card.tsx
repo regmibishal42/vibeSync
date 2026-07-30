@@ -129,7 +129,7 @@ export function JobCard({
             </Button>
           </div>
 
-          <JobShiftForm jobId={job.id} hourlyRate={job.hourly_rate ?? 0} />
+          <JobShiftForm jobId={job.id} hourlyRate={job.hourly_rate ?? 0} currency={currency} />
 
           {recentShifts.length > 0 ? (
             <div className="flex flex-col gap-1.5">

@@ -13,6 +13,8 @@ RPC function, the RLS model, and the caching/offline architecture in full.
 - [Row Level Security model](#row-level-security-model)
 - [Caching & performance architecture](#caching--performance-architecture)
 - [Offline quick-add architecture](#offline-quick-add-architecture)
+- [Ledger integrity guarantees](#ledger-integrity-guarantees)
+- [Correctness notes](#correctness-notes)
 - [Dev workflow](#dev-workflow)
 - [Resetting a partially applied schema](#resetting-a-partially-applied-schema)
 
@@ -46,7 +48,7 @@ application code — see [Row Level Security model](#row-level-security-model).
 |---|---|---|
 | `profiles` | One row per `auth.users` row | `role` (`OWNER`\|`PARTNER`), `currency_preference` |
 | `accounts` | Bank/digital-wallet/cash accounts | `account_type`, `starting_balance`, `current_balance` (trigger-maintained), `is_parent_account` |
-| `transactions` | The signed ledger — every money movement | `amount` (signed), `type` (`EXPENSE`\|`DEPOSIT`\|`TRANSFER`\|`LOAN`\|`REPAYMENT`), `category`, `job_id`, `loan_id` |
+| `transactions` | The signed ledger — every money movement | `amount` (signed), `type` (`EXPENSE`\|`DEPOSIT`\|`TRANSFER`\|`LOAN`\|`REPAYMENT`), `category`, `job_id`, `loan_id`, `transfer_group_id` (links both legs of one transfer), `client_id` (offline-replay idempotency key) |
 | `jobs` | Generic income sources | `employment_type`, `pay_type`, `hourly_rate`, `deposit_account_id` |
 | `job_shifts` | Hourly-job time entries | `hours_worked`, `calculated_pay` (trigger-derived), `payout_status`, `payout_batch_id` |
 | `payout_batches` | Groups settled shifts into one payout | `job_id`, `total_amount` |
@@ -91,6 +93,7 @@ lets OWNER act on PARTNER's rows and vice versa) unless noted.
 | `mark_recurring_transaction_paid(p_recurring_id, p_paid_date?)` | recurring row id, date | Posts one signed `transactions` row (sign/type flipped by `direction`) and advances `next_due_date` by the row's `frequency`. Works for both bills (EXPENSE) and salary (INCOME). |
 | `create_loan(p_account_id, p_counterparty_name, p_direction, p_principal_amount, p_loan_date?, p_due_date?, p_notes?)` | — | Inserts the `loans` row and posts the initial signed `transactions` leg (type `LOAN`). `user_id` is derived from the account's actual owner, not `auth.uid()`. |
 | `repay_loan(p_loan_id, p_amount, p_paid_date?, p_account_id?)` | — | Posts a `REPAYMENT` transaction (sign reversed from the loan's original direction) into `p_account_id` — defaults to the loan's own account, but can be any account **belonging to the loan's owner** (e.g. lent from bank, repaid in cash). Rejects non-positive amounts, amounts exceeding the remaining balance, and repayments on an already-settled loan. Auto-settles the loan once repayments cover the principal. |
+| `delete_transaction(p_transaction_id)` | transaction id | Removes a mis-entered transaction. Deletes **both** legs when the row belongs to a transfer (`transfer_group_id`), since dropping one alone would leave two accounts permanently out of balance. Refuses `LOAN`/`REPAYMENT` rows — those are owned by loans/loan_repayments state and must be managed from the Loans page. Returns the number of rows removed. |
 | `add_calendar_month(d)` | date | Advances a date by one calendar month, clamped to the shorter month's last day (`2026-01-31` → `2026-02-28`, not a March rollover). |
 
 ## Row Level Security model
@@ -192,7 +195,8 @@ would silently never fire there. Flush-on-reconnect covers the actual case
 npm run dev          # local dev server
 npm run build         # production build (also type-checks)
 npm run lint          # eslint
-npm run seed          # idempotent — creates/updates both accounts + starter data
+npm run check         # assertion self-check over the pure money/date logic
+npm run seed          # idempotent — provisions the OWNER/PARTNER auth users + profiles only
 ```
 
 `public/sw.js`'s `CACHE_VERSION` is auto-stamped by
@@ -201,6 +205,51 @@ build ID. The committed source has `"__CACHE_VERSION__"` as a placeholder
 — seeing a real build id there after a local build is expected; reset it
 back (or just don't commit a build artifact) before treating a diff as
 clean.
+
+## Ledger integrity guarantees
+
+`0012_ledger_integrity.sql` closes the gaps that would let stored money go
+wrong. Each was verified broken against a real database before the fix:
+
+- **Editing an account's opening balance resyncs its running balance.**
+  `init_account_balance()` only ever ran on INSERT, so changing
+  `starting_balance` left `current_balance` frozen at the old figure
+  indefinitely (reproduced live: 100 -> 500 left it showing 100). A BEFORE
+  UPDATE trigger now recomputes it in place.
+- **A transfer is one logical event.** Both legs share a `transfer_group_id`,
+  so `delete_transaction()` removes the pair — deleting a single leg would
+  otherwise leave two accounts permanently out of balance.
+- **Loan-owned ledger rows can't be deleted generically.** Dropping a
+  `LOAN`/`REPAYMENT` row directly would leave `loans.is_settled` and
+  `loan_repayments` asserting something untrue, so those are refused and
+  handled from the Loans page.
+- **Accounts can't be deleted out from under their history.**
+  `transactions.account_id` is ON DELETE CASCADE, so one DELETE would take
+  every transaction ever recorded against that account — including the
+  surviving halves of transfers to *other* accounts. A BEFORE DELETE trigger
+  blocks it while any transaction remains.
+- **Offline replays are idempotent.** A queued quick-add that actually
+  succeeded but whose response was lost used to post a second time on retry.
+  Entries now carry a client-generated `client_id` under a unique index; the
+  duplicate insert raises `23505`, which `insertSignedTransaction` treats as
+  success (the desired end state already holds) rather than an error that
+  would keep it queued and retrying.
+
+## Correctness notes
+
+- **Parent accounts are excluded from net worth** and from personal
+  income/spending stats. They're money the user administers, not money they
+  own — the wallet has always listed them as their own section, so folding
+  them into the headline figure overstated it. They still appear in the
+  per-account balance breakdown, where each bar is labelled and nothing is
+  aggregated.
+- **Search input is escaped before it reaches ILIKE.** `%` and `_` are LIKE
+  wildcards; unescaped, searching "50%" matched every row instead of the one
+  merchant with a literal `%`. See `src/lib/wallet/search.ts`.
+- **Currency grouping follows the currency.** NPR renders lakh/crore-grouped
+  (`Rs 12,34,567.50`) via `en-IN`; everything else stays Western-grouped via
+  `en-US`. Note `Intl` separates the NPR symbol from the amount with U+00A0,
+  not a plain space — relevant to any string comparison or export.
 
 ## Resetting a partially applied schema
 

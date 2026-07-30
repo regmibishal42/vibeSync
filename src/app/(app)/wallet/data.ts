@@ -4,6 +4,7 @@ import { cacheLife, cacheTag } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentProfile, getCurrentUser } from "@/lib/supabase/profile";
 import { CACHE_TAGS } from "@/lib/cache-tags";
+import { escapeLikePattern } from "@/lib/wallet/search";
 import type { ExpenseCategory } from "@/lib/types/database.types";
 
 // 'use cache: private' — cached only in *this browser's* memory (never
@@ -72,7 +73,7 @@ export const getWalletTransactionsData = cache(async (filters: TransactionFilter
   if (filters.category) query = query.eq("category", filters.category);
   if (filters.from) query = query.gte("transaction_date", filters.from);
   if (filters.to) query = query.lte("transaction_date", filters.to);
-  if (filters.q) query = query.ilike("merchant_or_item", `%${filters.q}%`);
+  if (filters.q) query = query.ilike("merchant_or_item", `%${escapeLikePattern(filters.q)}%`);
 
   query = query.limit(hasFilter ? 500 : 50);
 

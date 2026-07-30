@@ -127,6 +127,10 @@ export async function createTransaction(
     }
 
     const labels = transferLabels(source.account_type, destination.account_type);
+    // Both legs share one group id so a transfer can later be deleted (or
+    // reasoned about) as the single logical event it actually is — removing
+    // one leg alone would leave two accounts permanently out of balance.
+    const transferGroupId = crypto.randomUUID();
 
     const { error } = await supabase.from("transactions").insert([
       {
@@ -136,6 +140,7 @@ export async function createTransaction(
         type: "TRANSFER" as const,
         merchant_or_item: labels.out,
         transaction_date: parsed.data.transactionDate,
+        transfer_group_id: transferGroupId,
       },
       {
         account_id: parsed.data.destinationAccountId,
@@ -144,6 +149,7 @@ export async function createTransaction(
         type: "TRANSFER" as const,
         merchant_or_item: labels.in,
         transaction_date: parsed.data.transactionDate,
+        transfer_group_id: transferGroupId,
       },
     ]);
 
@@ -182,6 +188,35 @@ export async function createTransaction(
 
   if (error) {
     return { error };
+  }
+
+  updateTag(CACHE_TAGS.walletAccounts);
+  updateTag(CACHE_TAGS.walletTransactions);
+  updateTag(CACHE_TAGS.dashboardAccounts);
+  updateTag(CACHE_TAGS.dashboardTransactions);
+  return { success: true };
+}
+
+// Removing a mis-entered transaction. The real work (deleting BOTH legs of a
+// transfer, refusing loan-owned rows) lives in the delete_transaction()
+// Postgres function — see 0012_ledger_integrity.sql for why that can't just
+// be `delete from transactions`.
+export async function deleteTransaction(transactionId: string): Promise<ActionResult> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) {
+    return { error: "Not signed in." };
+  }
+
+  const { error } = await supabase.rpc("delete_transaction", {
+    p_transaction_id: transactionId,
+  });
+
+  if (error) {
+    return { error: error.message };
   }
 
   updateTag(CACHE_TAGS.walletAccounts);
