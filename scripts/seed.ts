@@ -129,7 +129,7 @@ async function main() {
     hourly_rate: 25,
     deposit_account_id: ownerBank,
   });
-  await ensureJob(supabase, userIds.OWNER, {
+  const devJobId = await ensureJob(supabase, userIds.OWNER, {
     name: "Software Dev (Full-time)",
     employment_type: "FULL_TIME",
     pay_type: "MONTHLY",
@@ -167,6 +167,7 @@ async function main() {
     amount: 85000,
     frequency: "MONTHLY",
     next_due_date: nextDueDate,
+    job_id: devJobId,
   });
 
   await ensureLoan(supabase, userIds.OWNER, {
@@ -272,14 +273,16 @@ async function ensureJob(
     .eq("user_id", userId)
     .eq("name", job.name)
     .maybeSingle();
-  if (existing) return;
+  if (existing) return existing.id;
 
-  const { error } = await supabase.from("jobs").insert({
-    user_id: userId,
-    ...job,
-  });
-  if (error) throw error;
+  const { data: created, error } = await supabase
+    .from("jobs")
+    .insert({ user_id: userId, ...job })
+    .select("id")
+    .single();
+  if (error || !created) throw error ?? new Error(`Could not create job: ${job.name}`);
   console.log(`✓ job seeded: ${job.name}`);
+  return created.id;
 }
 
 async function ensureRecurringTransaction(
@@ -293,6 +296,7 @@ async function ensureRecurringTransaction(
     amount: number;
     frequency: Database["public"]["Enums"]["recurring_frequency"];
     next_due_date: string;
+    job_id?: string;
   }
 ) {
   const accountId = await getAccountId(supabase, userId, item.account_name);
@@ -308,6 +312,7 @@ async function ensureRecurringTransaction(
   const { error } = await supabase.from("recurring_transactions").insert({
     user_id: userId,
     account_id: accountId,
+    job_id: item.job_id,
     label: item.label,
     direction: item.direction,
     category: item.category,

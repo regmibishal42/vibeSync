@@ -3,6 +3,7 @@ import { cacheLife, cacheTag } from "next/cache";
 
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentProfile } from "@/lib/supabase/profile";
+import { CACHE_TAGS } from "@/lib/cache-tags";
 
 // 'use cache: private' — browser-memory-only, see wallet/data.ts for the
 // full rationale (instant tab-switch/back-nav within 30s, zero server-side
@@ -13,7 +14,7 @@ import { getCurrentProfile } from "@/lib/supabase/profile";
 // who" rollup needs the view) — one fetcher, one <Suspense> boundary.
 export const getLoansData = cache(async () => {
   "use cache: private";
-  cacheTag("loans");
+  cacheTag(CACHE_TAGS.loans);
   cacheLife("seconds");
 
   const [profile, supabase] = await Promise.all([getCurrentProfile(), createClient()]);

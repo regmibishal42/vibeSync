@@ -1,9 +1,10 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
+import { updateTag } from "next/cache";
 import { z } from "zod";
 
 import { createClient } from "@/lib/supabase/server";
+import { CACHE_TAGS } from "@/lib/cache-tags";
 
 type ActionResult = { error?: string; success?: boolean; amount?: number };
 
@@ -95,8 +96,12 @@ export async function createJob(
     }
   }
 
-  revalidatePath("/work");
-  revalidatePath("/");
+  updateTag(CACHE_TAGS.workJobs);
+  updateTag(CACHE_TAGS.dashboardJobs);
+  if (parsed.data.payType !== "HOURLY") {
+    updateTag(CACHE_TAGS.recurringTransactions);
+    updateTag(CACHE_TAGS.dashboardRecurring);
+  }
   return { success: true };
 }
 
@@ -119,7 +124,8 @@ export async function setJobActive(jobId: string, isActive: boolean): Promise<Ac
     return { error: error.message };
   }
 
-  revalidatePath("/work");
+  updateTag(CACHE_TAGS.workJobs);
+  updateTag(CACHE_TAGS.dashboardJobs);
   return { success: true };
 }
 
@@ -163,8 +169,8 @@ export async function createJobShift(
     return { error: error.message };
   }
 
-  revalidatePath("/work");
-  revalidatePath("/");
+  updateTag(CACHE_TAGS.workJobs);
+  updateTag(CACHE_TAGS.dashboardJobs);
   return { success: true };
 }
 
@@ -189,8 +195,12 @@ export async function settleJobPayout(jobId: string): Promise<ActionResult> {
     return { error: error.message };
   }
 
-  revalidatePath("/work");
-  revalidatePath("/");
-  revalidatePath("/wallet");
+  updateTag(CACHE_TAGS.workJobs);
+  updateTag(CACHE_TAGS.workPayoutBatches);
+  updateTag(CACHE_TAGS.dashboardJobs);
+  updateTag(CACHE_TAGS.walletAccounts);
+  updateTag(CACHE_TAGS.walletTransactions);
+  updateTag(CACHE_TAGS.dashboardAccounts);
+  updateTag(CACHE_TAGS.dashboardTransactions);
   return { success: true, amount: data?.total_amount };
 }

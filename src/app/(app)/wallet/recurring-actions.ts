@@ -1,10 +1,11 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
+import { updateTag } from "next/cache";
 import { z } from "zod";
 
 import { createClient } from "@/lib/supabase/server";
 import { CATEGORY_ORDER } from "@/lib/wallet/categories";
+import { CACHE_TAGS } from "@/lib/cache-tags";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database, ExpenseCategory } from "@/lib/types/database.types";
 
@@ -86,8 +87,8 @@ export async function createRecurringBill(
     return { error: error.message };
   }
 
-  revalidatePath("/wallet");
-  revalidatePath("/");
+  updateTag(CACHE_TAGS.recurringTransactions);
+  updateTag(CACHE_TAGS.dashboardRecurring);
   return { success: true };
 }
 
@@ -111,9 +112,18 @@ export async function markRecurringTransactionPaid(
     return { error: error.message };
   }
 
-  revalidatePath("/wallet");
-  revalidatePath("/work");
-  revalidatePath("/");
+  // Posts a real wallet transaction, so this could be settling either a
+  // plain bill or a job-linked salary schedule — tag both surfaces rather
+  // than looking up which one this row is, since over-invalidating a tag by
+  // one extra (still-precise) name costs nothing but a cache-miss re-fetch.
+  updateTag(CACHE_TAGS.walletAccounts);
+  updateTag(CACHE_TAGS.walletTransactions);
+  updateTag(CACHE_TAGS.recurringTransactions);
+  updateTag(CACHE_TAGS.dashboardAccounts);
+  updateTag(CACHE_TAGS.dashboardTransactions);
+  updateTag(CACHE_TAGS.dashboardRecurring);
+  updateTag(CACHE_TAGS.workJobs);
+  updateTag(CACHE_TAGS.dashboardJobs);
   return { success: true };
 }
 
@@ -138,8 +148,9 @@ export async function deactivateRecurringTransaction(
     return { error: error.message };
   }
 
-  revalidatePath("/wallet");
-  revalidatePath("/work");
-  revalidatePath("/");
+  updateTag(CACHE_TAGS.recurringTransactions);
+  updateTag(CACHE_TAGS.dashboardRecurring);
+  updateTag(CACHE_TAGS.workJobs);
+  updateTag(CACHE_TAGS.dashboardJobs);
   return { success: true };
 }

@@ -1,9 +1,10 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
+import { updateTag } from "next/cache";
 import { z } from "zod";
 
 import { createClient } from "@/lib/supabase/server";
+import { CACHE_TAGS } from "@/lib/cache-tags";
 
 type ActionResult = { error?: string; success?: boolean };
 
@@ -58,9 +59,12 @@ export async function createLoan(
     return { error: error.message };
   }
 
-  revalidatePath("/loans");
-  revalidatePath("/wallet");
-  revalidatePath("/");
+  updateTag(CACHE_TAGS.loans);
+  updateTag(CACHE_TAGS.dashboardLoans);
+  updateTag(CACHE_TAGS.walletAccounts);
+  updateTag(CACHE_TAGS.walletTransactions);
+  updateTag(CACHE_TAGS.dashboardAccounts);
+  updateTag(CACHE_TAGS.dashboardTransactions);
   return { success: true };
 }
 
@@ -106,8 +110,11 @@ export async function repayLoan(
     return { error: error.message };
   }
 
-  revalidatePath("/loans");
-  revalidatePath("/wallet");
-  revalidatePath("/");
+  updateTag(CACHE_TAGS.loans);
+  updateTag(CACHE_TAGS.dashboardLoans);
+  updateTag(CACHE_TAGS.walletAccounts);
+  updateTag(CACHE_TAGS.walletTransactions);
+  updateTag(CACHE_TAGS.dashboardAccounts);
+  updateTag(CACHE_TAGS.dashboardTransactions);
   return { success: true };
 }

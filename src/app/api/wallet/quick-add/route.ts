@@ -1,9 +1,10 @@
-import { revalidatePath } from "next/cache";
+import { revalidateTag } from "next/cache";
 import { z } from "zod";
 
 import { createClient } from "@/lib/supabase/server";
 import { insertSignedTransaction } from "@/lib/wallet/create-transaction";
 import { CATEGORY_ORDER } from "@/lib/wallet/categories";
+import { CACHE_TAGS } from "@/lib/cache-tags";
 import type { ExpenseCategory } from "@/lib/types/database.types";
 
 // Plain fetchable endpoint (not a Server Action) so the offline queue in
@@ -52,7 +53,13 @@ export async function POST(request: Request) {
     return Response.json({ error }, { status: 400 });
   }
 
-  revalidatePath("/wallet");
-  revalidatePath("/");
+  // updateTag() is action-only — this is a Route Handler, so its precise
+  // tag-scoped equivalent is revalidateTag(tag, { expire: 0 }) (immediate
+  // expiration, matching updateTag's read-your-own-writes semantics rather
+  // than the 'max' profile's background stale-while-revalidate).
+  revalidateTag(CACHE_TAGS.walletAccounts, { expire: 0 });
+  revalidateTag(CACHE_TAGS.walletTransactions, { expire: 0 });
+  revalidateTag(CACHE_TAGS.dashboardAccounts, { expire: 0 });
+  revalidateTag(CACHE_TAGS.dashboardTransactions, { expire: 0 });
   return Response.json({ success: true });
 }

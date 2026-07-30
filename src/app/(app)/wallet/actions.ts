@@ -1,11 +1,12 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
+import { updateTag } from "next/cache";
 import { z } from "zod";
 
 import { createClient } from "@/lib/supabase/server";
 import { CATEGORY_ORDER } from "@/lib/wallet/categories";
 import { insertSignedTransaction, transferLabels } from "@/lib/wallet/create-transaction";
+import { CACHE_TAGS } from "@/lib/cache-tags";
 import type { ExpenseCategory } from "@/lib/types/database.types";
 
 const categoryEnum = CATEGORY_ORDER as [ExpenseCategory, ...ExpenseCategory[]];
@@ -55,8 +56,8 @@ export async function createAccount(
     return { error: error.message };
   }
 
-  revalidatePath("/wallet");
-  revalidatePath("/");
+  updateTag(CACHE_TAGS.walletAccounts);
+  updateTag(CACHE_TAGS.dashboardAccounts);
   return { success: true };
 }
 
@@ -150,8 +151,10 @@ export async function createTransaction(
       return { error: error.message };
     }
 
-    revalidatePath("/wallet");
-    revalidatePath("/");
+    updateTag(CACHE_TAGS.walletAccounts);
+    updateTag(CACHE_TAGS.walletTransactions);
+    updateTag(CACHE_TAGS.dashboardAccounts);
+    updateTag(CACHE_TAGS.dashboardTransactions);
     return { success: true };
   }
 
@@ -181,7 +184,9 @@ export async function createTransaction(
     return { error };
   }
 
-  revalidatePath("/wallet");
-  revalidatePath("/");
+  updateTag(CACHE_TAGS.walletAccounts);
+  updateTag(CACHE_TAGS.walletTransactions);
+  updateTag(CACHE_TAGS.dashboardAccounts);
+  updateTag(CACHE_TAGS.dashboardTransactions);
   return { success: true };
 }

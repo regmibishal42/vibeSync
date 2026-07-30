@@ -93,14 +93,18 @@ begin
     account_id, user_id, amount, type, category, merchant_or_item, transaction_date, job_id
   ) values (
     v_row.account_id, v_row.user_id, v_signed_amount,
-    case when v_row.direction = 'INCOME' then 'DEPOSIT' else 'EXPENSE' end,
+    case when v_row.direction = 'INCOME' then 'DEPOSIT' else 'EXPENSE' end::transaction_type,
     v_row.category, v_row.label, p_paid_date, v_row.job_id
   )
   returning * into v_tx;
 
+  -- Explicit ::date on every branch — `date + interval` yields timestamp,
+  -- which doesn't unify cleanly with add_calendar_month()'s plain `date`
+  -- return inside a single CASE (same class of bug as the ::transaction_type
+  -- cast above: Postgres won't always implicitly resolve mixed branch types).
   v_next_due := case v_row.frequency
-    when 'WEEKLY' then v_row.next_due_date + interval '7 days'
-    when 'BIWEEKLY' then v_row.next_due_date + interval '14 days'
+    when 'WEEKLY' then (v_row.next_due_date + interval '7 days')::date
+    when 'BIWEEKLY' then (v_row.next_due_date + interval '14 days')::date
     when 'MONTHLY' then public.add_calendar_month(v_row.next_due_date)
   end;
 

@@ -29,8 +29,9 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
+*.log
 
-# env files (can opt-in for committing if needed)
+# env files — never committed; .env.example is the only tracked template
 .env*
 !.env.example
 
@@ -40,3 +41,17 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# supabase CLI local state (created by `supabase link`/`supabase start`,
+# machine-specific — never something to share across clones)
+supabase/.branches
+supabase/.temp
+
+# editor/IDE — personal, not project config
+.vscode/
+.idea/
+*.swp
+
+# Claude Code — project-level settings.json (if any) is intentionally
+# tracked for the team; only the personal local-override file is not
+.claude/settings.local.json
