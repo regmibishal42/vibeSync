@@ -68,6 +68,8 @@ export function TransferForm({ accounts }: { accounts: Account[] }) {
       transaction_date: transactionDate,
       loan_id: null,
       job_id: null,
+      transfer_group_id: null,
+      client_id: null,
       created_at: new Date().toISOString(),
       _pending: true,
     };
@@ -82,6 +84,8 @@ export function TransferForm({ accounts }: { accounts: Account[] }) {
       transaction_date: transactionDate,
       loan_id: null,
       job_id: null,
+      transfer_group_id: null,
+      client_id: null,
       created_at: new Date().toISOString(),
       _pending: true,
     };

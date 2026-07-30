@@ -32,8 +32,12 @@ plus the self-contained RLS blocks in `0010_recurring_transactions.sql` and
 - **Recharts**, themed through a shadcn-style `ChartContainer`
 - **A hand-rolled service worker** for PWA support (see [_why not Serwist_](#why-a-hand-rolled-service-worker)), plus a `localStorage`-backed offline queue for quick-add (see [_offline quick-add_](#offline-quick-add))
 
-All data fetching is Server Components + Server Actions + `revalidatePath` —
-there's no client-side data-fetching library.
+All data fetching is Server Components + Server Actions + tag-scoped
+`updateTag`/`revalidateTag` invalidation (see [_why `updateTag`, not
+`revalidatePath`_](#why-updatetag-not-revalidatepath-in-every-server-action)) —
+there's no client-side data-fetching library. See
+[`DOCUMENTATION.md`](./DOCUMENTATION.md) for the full data model, RPC
+reference, and architecture deep-dive; this README stays a quick-start.
 
 ## Getting started
 
@@ -42,6 +46,10 @@ there's no client-side data-fetching library.
 ```bash
 npm install
 ```
+
+Useful scripts: `npm run dev`, `npm run build`, `npm run lint`, and
+`npm run check` (assertion self-check over the pure money/date logic —
+period bucketing, LIKE escaping, currency grouping, pay rounding).
 
 ### 2. Create a Supabase project
 
@@ -55,8 +63,17 @@ grab three values from **Project Settings → API**:
 ### 3. Run the migrations
 
 In the Supabase dashboard's **SQL Editor**, run each file in
-`supabase/migrations/` **in order** (`0001_...` through `0011_...`), or use
+`supabase/migrations/` **in order** (`0001_...` through `0012_...`), or use
 the Supabase CLI:
+
+> **If you're retrying after a partial failure**: an interrupted earlier run
+> can leave enum types (e.g. `profile_role`) created with stale values —
+> every `CREATE TYPE` here is guarded with `EXCEPTION WHEN duplicate_object
+> THEN NULL`, which silently *skips* recreating a type that already exists,
+> even with the wrong values. Since a fresh project has no real data, the
+> simplest fix is dropping this app's own objects first (see
+> [`DOCUMENTATION.md`](./DOCUMENTATION.md#resetting-a-partially-applied-schema)
+> for the drop list) and re-running the migrations clean.
 
 ```bash
 supabase link --project-ref <your-project-ref>
@@ -78,12 +95,11 @@ emails/passwords/display names — those are read by `scripts/seed.ts`.
 npm run seed
 ```
 
-Idempotent — safe to re-run. Creates the OWNER and PARTNER auth users
-(there's no public sign-up route; this script is the only way in), their
-`profiles` rows, a few starter accounts (Khalti, eSewa, Nabil Bank, a cash
-wallet, a flagged parents' account, and a Sydney bank account for the
-partner), two sample jobs (one hourly, one monthly-salary), a couple of
-recurring bills/salary schedules, and one sample loan.
+Idempotent — safe to re-run. Creates only the OWNER and PARTNER auth users
+(there's no public sign-up route; this script is the only way in) and their
+`profiles` rows — deliberately no sample accounts/jobs/loans, so the app
+starts genuinely empty. Add real accounts, jobs, and loans from inside the
+app itself after logging in.
 
 **Change both passwords after first login.**
 
@@ -111,6 +127,22 @@ leg on the destination — so the balance trigger
 (`supabase/migrations/0004_transactions.sql`) never needs to special-case
 transaction types: `accounts.current_balance` is always recomputed as
 `starting_balance + SUM(amount)` after every write.
+
+Mistakes are fixable: a transaction can be deleted from the wallet list.
+That runs through `delete_transaction()` rather than a plain DELETE, because
+a transfer has to lose **both** legs at once (they share a
+`transfer_group_id`) or two accounts end up permanently out of balance, and
+loan-owned rows have to be refused so `loans.is_settled` never starts lying.
+See [_Ledger integrity guarantees_](./DOCUMENTATION.md#ledger-integrity-guarantees)
+for the full list of what's enforced at the database layer.
+
+`formatCurrency()` (`src/lib/format.ts`) picks its `Intl.NumberFormat`
+locale from the currency, not a fixed one: NPR renders lakh/crore-grouped
+(`Rs 12,34,567.50` — thousands, then every 2 digits) via the `en-IN`
+locale, while every other currency (AUD, USD, ...) stays Western-grouped
+(`$1,234,567.50`) via `en-US`. Same plain 0-9 digits either way — only the
+grouping rule changes, which is why it's `en-IN` and not `ne-NP` (that
+locale would also switch to Devanagari numerals).
 
 Jobs are generic (`0006_jobs.sql`): any number per user, each either
 `FULL_TIME`/`PART_TIME` and paid `HOURLY`/`MONTHLY`/`BIWEEKLY`. Hourly jobs
@@ -165,14 +197,29 @@ only in that browser's own memory, never written to a shared store, so
 there's no cross-user leak surface at all — OWNER and PARTNER each just have
 their own independent in-memory cache. Practical effect: switching between
 Home/Work/Wallet/Loans and coming back within ~30s is instant (no network
-round trip), while every mutating Server Action's existing `revalidatePath`
-call clears the *entire* client cache immediately per Next's documented
-behavior — so a save on this device is never masked by the window. A hard
-reload always re-executes against Supabase fresh, since private-cache
-functions are excluded from static-shell prerendering. The only residual
-staleness is cross-device (a change on one phone can take up to 30s to show
-on the other's already-open tab) — inherent to any client cache without a
-push channel, and tight enough not to matter for two people's finances.
+round trip). The only residual staleness is cross-device (a change on one
+phone can take up to 30s to show on the other's already-open tab) —
+inherent to any client cache without a push channel, and tight enough not
+to matter for two people's finances.
+
+### Why `updateTag`, not `revalidatePath`, in every Server Action
+
+`revalidatePath` called from a Server Action currently has a documented
+Next.js limitation: it "causes all previously visited pages to refresh when
+navigated to again" — regardless of which path you actually pass. Given
+every route here is `'use cache: private'`, that meant adding an expense
+would make switching to the *unrelated* Work or Loans tab also trigger a
+refetch, even though nothing there changed. Every `data.ts` fetcher's
+`cacheTag(...)` call uses a name from `src/lib/cache-tags.ts`, and every
+Server Action calls `updateTag(...)` for exactly the tags the write actually
+touched (the one Route Handler, `/api/wallet/quick-add`, uses
+`revalidateTag(tag, { expire: 0 })` instead — `updateTag` only works inside
+Server Actions). A few mutations intentionally over-invalidate by one tag
+when they can't cheaply tell which surface applies without an extra query
+(e.g. `markRecurringTransactionPaid` always busts `work-jobs`/
+`dashboard-jobs` too, since the row being paid might be a job-linked
+salary) — still far more precise than nuking every visited page, and the
+comment at each call site says why.
 
 ### Why hand-authored UI components
 
@@ -234,40 +281,47 @@ scripts/
 supabase/migrations/          numbered SQL migrations, including all RLS policies
 ```
 
-## What to verify once you have a live Supabase project
+## Verified against a live Supabase project
 
-This was built without a live Supabase project connected (network access to
-provision one wasn't available in this environment), so `npm run build` /
-`tsc` / `eslint` are clean but the following need a real end-to-end check
-once you've completed steps 2–5 above:
+Everything below has been run end-to-end against a real Supabase project
+(schema applied, both accounts seeded, real login sessions), not just
+reasoned through statically:
 
-- Logging in as each seeded account and confirming the OWNER/PARTNER RLS
-  scoping across accounts, jobs, and loans
-- That balances update immediately after a transaction, shift settlement,
-  recurring "mark paid", loan, or transfer
+- OWNER/PARTNER RLS scoping — confirmed both via direct API calls under each
+  user's real session token and via actual rendered pages (a PARTNER's
+  `/wallet` page never contains the OWNER's account names in the HTML)
+- The balance-recalc trigger after a plain transaction insert
+- `create_loan()` / `repay_loan()`, including repaying into a *different*
+  account than the loan was created from (lent from bank, repaid in cash)
+- `repay_loan()`'s guards: overpayment, non-positive amount, and
+  already-settled all reject with a clear error
+- `settle_job_shifts()`: shift → payout batch → real deposit → `PAID`, in
+  one call
+- `mark_recurring_transaction_paid()` — this is where a real bug was found
+  (a `CASE` expression resolving to `text` instead of `transaction_type`/
+  `date`, which Postgres won't auto-cast) and fixed; re-verified after
+  the fix
+- `loan_balances` view nets correctly across multiple loans with the same
+  counterparty
+- The `/api/wallet/quick-add` route through a real authenticated request
+- `scripts/seed.ts` idempotency (safe to re-run)
+
+Still worth checking on your own deployment, since this environment can't
+reproduce them:
+
 - PWA install prompt and offline behavior on an actual phone — specifically
   the quick-add offline queue: add an expense in airplane mode, confirm it
   shows optimistically, then confirm it actually posts once back online
-- That `migrations/0006_jobs.sql` through `0011_loans.sql` apply cleanly
-  against a real project (only ever run against an empty `transactions`
-  table in this build)
-- `add_calendar_month()`'s month-overflow clamping — e.g.
-  `select public.add_calendar_month(date '2026-01-31');` should return
-  `2026-02-28`, not roll into March
-- "Mark paid" on a recurring bill/salary: confirm it inserts one real
-  transaction, advances `next_due_date` by the right interval, and that a
-  PARTNER can only settle her own rows (RPC is `security invoker`)
-- `settle_job_shifts()`: confirm it posts one deposit transaction tagged
-  with `job_id` and flips every pending shift to `PAID` in the same call
-- `create_loan()`/`repay_loan()`: confirm the signed ledger row matches the
-  loan's direction, and that `loan_balances` nets correctly across multiple
-  loans with the same counterparty
 - CSV export (`/api/wallet/export`) ownership scoping — a PARTNER's export
   should never include the OWNER's rows, and `?scope=all` should only work
   for the OWNER
 - Browser due-date notifications: the permission prompt, and that a bill/
   salary row only notifies once per local day (not on every page load)
-- Real Lighthouse scores and Cache Components' static-shell behavior against
-  the actual Vercel deployment — the streaming/PPR structure builds cleanly
-  here, but perceived speed depends on real network/Supabase latency this
-  sandbox can't reproduce
+- Real Lighthouse scores and the `'use cache: private'` tab-switch speedup
+  against the actual Vercel deployment — verified locally against a
+  production build (`next build && next start`), but perceived speed on a
+  real device depends on real network latency this environment can't fully
+  reproduce
+- `add_calendar_month()`'s month-overflow clamping on a date actually
+  crossing a shorter month, e.g. `select public.add_calendar_month(date
+  '2026-01-31');` should return `2026-02-28`

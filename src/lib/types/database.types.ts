@@ -93,6 +93,8 @@ export type Database = {
           transaction_date: string;
           loan_id: string | null;
           job_id: string | null;
+          transfer_group_id: string | null;
+          client_id: string | null;
           created_at: string;
         };
         Insert: {
@@ -106,6 +108,8 @@ export type Database = {
           transaction_date?: string;
           loan_id?: string | null;
           job_id?: string | null;
+          transfer_group_id?: string | null;
+          client_id?: string | null;
         };
         Update: Partial<{
           account_id: string;
@@ -343,6 +347,10 @@ export type Database = {
           p_notes?: string | null;
         };
         Returns: Database["public"]["Tables"]["loans"]["Row"];
+      };
+      delete_transaction: {
+        Args: { p_transaction_id: string };
+        Returns: number;
       };
       repay_loan: {
         Args: {

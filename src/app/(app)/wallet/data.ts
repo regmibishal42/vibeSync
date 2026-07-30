@@ -3,15 +3,18 @@ import { cacheLife, cacheTag } from "next/cache";
 
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentProfile, getCurrentUser } from "@/lib/supabase/profile";
+import { CACHE_TAGS } from "@/lib/cache-tags";
+import { escapeLikePattern } from "@/lib/wallet/search";
 import type { ExpenseCategory } from "@/lib/types/database.types";
 
 // 'use cache: private' — cached only in *this browser's* memory (never
 // persisted server-side), so switching Home/Work/Wallet/Loans and coming
 // back within the `cacheLife('seconds')` window (30s stale) is instant, with
 // zero cross-user leak risk since nothing is ever written to a shared store.
-// Every mutating Server Action in this app already calls revalidatePath,
-// which — per Next's client-cache behavior — clears the ENTIRE client cache
-// immediately, so a save on this device is never masked by the 30s window.
+// Every mutating Server Action calls `updateTag` for exactly the tags below
+// that it actually touches (not a blanket `revalidatePath`, which currently
+// busts every previously-visited page on next nav — see cache-tags.ts), so a
+// save on this device is instantly fresh without nuking unrelated tabs' cache.
 // A hard reload/new tab always re-executes this against Supabase fresh,
 // since private-cache functions are excluded from static-shell prerendering.
 //
@@ -21,7 +24,7 @@ import type { ExpenseCategory } from "@/lib/types/database.types";
 // the transaction list streams in.
 export const getWalletAccountsData = cache(async () => {
   "use cache: private";
-  cacheTag("wallet-accounts");
+  cacheTag(CACHE_TAGS.walletAccounts);
   cacheLife("seconds");
 
   const [profile, user, supabase] = await Promise.all([
@@ -56,7 +59,7 @@ export type TransactionFilters = {
 // the last 50 rows would be a broken filter, not a real one.
 export const getWalletTransactionsData = cache(async (filters: TransactionFilters = {}) => {
   "use cache: private";
-  cacheTag("wallet-transactions");
+  cacheTag(CACHE_TAGS.walletTransactions);
   cacheLife("seconds");
 
   const supabase = await createClient();
@@ -70,7 +73,7 @@ export const getWalletTransactionsData = cache(async (filters: TransactionFilter
   if (filters.category) query = query.eq("category", filters.category);
   if (filters.from) query = query.gte("transaction_date", filters.from);
   if (filters.to) query = query.lte("transaction_date", filters.to);
-  if (filters.q) query = query.ilike("merchant_or_item", `%${filters.q}%`);
+  if (filters.q) query = query.ilike("merchant_or_item", `%${escapeLikePattern(filters.q)}%`);
 
   query = query.limit(hasFilter ? 500 : 50);
 
@@ -85,7 +88,7 @@ export const getWalletTransactionsData = cache(async (filters: TransactionFilter
 // is well within this app's actual scale.
 export const getWalletMonthTransactionsData = cache(async () => {
   "use cache: private";
-  cacheTag("wallet-transactions");
+  cacheTag(CACHE_TAGS.walletTransactions);
   cacheLife("seconds");
 
   const supabase = await createClient();
@@ -102,7 +105,7 @@ export const getWalletMonthTransactionsData = cache(async () => {
 
 export const getRecurringTransactionsData = cache(async () => {
   "use cache: private";
-  cacheTag("recurring-transactions");
+  cacheTag(CACHE_TAGS.recurringTransactions);
   cacheLife("seconds");
 
   const supabase = await createClient();

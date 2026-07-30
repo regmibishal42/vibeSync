@@ -43,8 +43,12 @@ function buildPeriodStats(
   accounts: Account[],
   ownUserId: string
 ): PeriodStats {
+  // Same parent-account exclusion as net worth above: flows through an
+  // account held for a parent aren't this user's own income/spending.
   const ownAccountIds = new Set(
-    accounts.filter((a) => a.user_id === ownUserId).map((a) => a.id)
+    accounts
+      .filter((a) => a.user_id === ownUserId && !a.is_parent_account)
+      .map((a) => a.id)
   );
   const periodTx = transactions.filter(
     (t) => ownAccountIds.has(t.account_id) && isInPeriod(t.transaction_date, period)
@@ -135,7 +139,12 @@ async function HomeHero() {
     getDashboardRecurringData(),
   ]);
   const currency = profile?.currency_preference ?? "AUD";
-  const ownAccounts = accounts.filter((a) => a.user_id === user?.id);
+  // Parent accounts are money this user *administers*, not money they own —
+  // the wallet page has always listed them as their own separate section, so
+  // folding them into "Net worth" would silently overstate it.
+  const ownAccounts = accounts.filter(
+    (a) => a.user_id === user?.id && !a.is_parent_account
+  );
   const netWorth = ownAccounts.reduce((sum, a) => sum + a.current_balance, 0);
 
   const today = todayLocalISO();

@@ -29,6 +29,7 @@ export async function insertSignedTransaction(
     category?: ExpenseCategory | null;
     merchantOrItem?: string | null;
     transactionDate?: string;
+    clientId?: string | null;
   }
 ): Promise<{ error?: string }> {
   const ownerId = await getAccountOwner(supabase, input.accountId);
@@ -47,7 +48,15 @@ export async function insertSignedTransaction(
     category: input.category ?? null,
     merchant_or_item: input.merchantOrItem ?? null,
     transaction_date: input.transactionDate ?? new Date().toISOString(),
+    client_id: input.clientId ?? null,
   });
+
+  // 23505 = unique_violation on (user_id, client_id): this exact entry was
+  // already written by an earlier attempt whose response the client never
+  // saw (a normal outcome when the offline queue replays over a flaky
+  // connection). The desired end state already holds, so report success
+  // rather than surfacing an error that would keep it queued and retrying.
+  if (error?.code === "23505") return {};
 
   return error ? { error: error.message } : {};
 }

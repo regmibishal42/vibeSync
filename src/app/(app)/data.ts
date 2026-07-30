@@ -3,17 +3,18 @@ import { cacheLife, cacheTag } from "next/cache";
 
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentProfile, getCurrentUser } from "@/lib/supabase/profile";
+import { CACHE_TAGS } from "@/lib/cache-tags";
 
 // 'use cache: private' on every fetcher below — cached only in this
 // browser's own memory (never persisted server-side), so tab-switching
 // between Home/Work/Wallet/Loans and coming back within the 30s
 // `cacheLife('seconds')` window is instant, with zero cross-user leak risk.
-// Every mutating Server Action already calls revalidatePath, which clears
-// the entire client cache immediately, so a save on this device is never
-// masked by the window. See wallet/data.ts for the full rationale.
+// Every mutating Server Action calls `updateTag` for exactly the tags it
+// touches (not a blanket `revalidatePath`) — see wallet/data.ts and
+// lib/cache-tags.ts for the full rationale.
 export const getDashboardAccountsData = cache(async () => {
   "use cache: private";
-  cacheTag("dashboard-accounts");
+  cacheTag(CACHE_TAGS.dashboardAccounts);
   cacheLife("seconds");
 
   const [profile, user, supabase] = await Promise.all([
@@ -31,7 +32,7 @@ export const getDashboardAccountsData = cache(async () => {
 // every dashboard load.
 export const getDashboardTransactionsData = cache(async () => {
   "use cache: private";
-  cacheTag("dashboard-transactions");
+  cacheTag(CACHE_TAGS.dashboardTransactions);
   cacheLife("seconds");
 
   const supabase = await createClient();
@@ -48,7 +49,7 @@ export const getDashboardTransactionsData = cache(async () => {
 
 export const getDashboardJobsData = cache(async () => {
   "use cache: private";
-  cacheTag("dashboard-jobs");
+  cacheTag(CACHE_TAGS.dashboardJobs);
   cacheLife("seconds");
 
   const supabase = await createClient();
@@ -71,7 +72,7 @@ export const getDashboardJobsData = cache(async () => {
 // upcoming bills/salary, never mixed with the other's.
 export const getDashboardRecurringData = cache(async () => {
   "use cache: private";
-  cacheTag("dashboard-recurring");
+  cacheTag(CACHE_TAGS.dashboardRecurring);
   cacheLife("seconds");
 
   const [user, supabase] = await Promise.all([getCurrentUser(), createClient()]);
@@ -89,7 +90,7 @@ export const getDashboardRecurringData = cache(async () => {
 
 export const getDashboardLoanBalancesData = cache(async () => {
   "use cache: private";
-  cacheTag("dashboard-loans");
+  cacheTag(CACHE_TAGS.dashboardLoans);
   cacheLife("seconds");
 
   const supabase = await createClient();

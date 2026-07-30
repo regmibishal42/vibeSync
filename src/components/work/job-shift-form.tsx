@@ -21,9 +21,11 @@ import { formatCurrency, todayLocalISO } from "@/lib/format";
 export function JobShiftForm({
   jobId,
   hourlyRate,
+  currency,
 }: {
   jobId: string;
   hourlyRate: number;
+  currency: string;
 }) {
   const [open, setOpen] = useState(false);
   const [shiftDate, setShiftDate] = useState(todayLocalISO());
@@ -93,7 +95,7 @@ export function JobShiftForm({
           <div className="bg-shift/10 flex items-center justify-between rounded-xl p-4 text-sm">
             <span className="text-muted-foreground">Estimated pay</span>
             <span className="text-shift text-base font-semibold">
-              {formatCurrency(calculateShiftPay(hoursWorked, hourlyRate), "AUD")}
+              {formatCurrency(calculateShiftPay(hoursWorked, hourlyRate), currency)}
             </span>
           </div>
 
