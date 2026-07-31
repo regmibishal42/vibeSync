@@ -18,7 +18,7 @@ import { AccountCard } from "@/components/wallet/account-card";
 import { AccountForm } from "@/components/wallet/account-form";
 import { QuickAddButton } from "@/components/wallet/quick-add-button";
 import { TransferForm } from "@/components/wallet/transfer-form";
-import { ConnectedTransactionList } from "@/components/wallet/connected-transaction-list";
+import { TransactionFeed } from "@/components/wallet/transaction-feed";
 import { TransactionFilters } from "@/components/wallet/transaction-filters";
 import { RecurringTransactionForm } from "@/components/wallet/recurring-transaction-form";
 import { RecurringTransactionList } from "@/components/wallet/recurring-transaction-list";
@@ -40,10 +40,28 @@ export const metadata: Metadata = { title: "Wallet" };
 
 type WalletSearchParams = {
   category?: string;
+  type?: string;
+  account?: string;
   from?: string;
   to?: string;
   q?: string;
+  min?: string;
+  max?: string;
 };
+
+const TRANSACTION_TYPES = [
+  "EXPENSE",
+  "DEPOSIT",
+  "TRANSFER",
+  "LOAN",
+  "REPAYMENT",
+] as const;
+
+function positiveNumber(raw: string | undefined): number | undefined {
+  if (!raw) return undefined;
+  const n = Number(raw);
+  return Number.isFinite(n) && n >= 0 ? n : undefined;
+}
 
 function isThisMonth(iso: string) {
   const d = new Date(iso);
@@ -78,7 +96,9 @@ export default function WalletPage({
 
       <section className="flex flex-col gap-3">
         <h2 className="text-sm font-medium">Recent transactions</h2>
-        <TransactionFilters />
+        <Suspense fallback={<div className="bg-muted h-12 w-full animate-pulse rounded-lg" />}>
+          <WalletFilters />
+        </Suspense>
         <Suspense fallback={<ListSkeleton />}>
           <WalletTransactions searchParams={searchParams} />
         </Suspense>
@@ -88,28 +108,18 @@ export default function WalletPage({
 }
 
 async function WalletSummary() {
-  const { profile, user, accounts, profiles } = await getWalletAccountsData();
+  const { profile, accounts } = await getWalletAccountsData();
 
   const currency = profile?.currency_preference ?? "AUD";
   const isOwner = profile?.role === "OWNER";
 
-  // Accounts don't carry their own currency column — each one's currency is
-  // implicitly its owner's profile.currency_preference. Needed so the OWNER
-  // (who can see the PARTNER's accounts too) doesn't render her AUD amounts
-  // with an NPR label just because the viewer's own currency is NPR.
-  const currencyByUserId = new Map(profiles.map((p) => [p.id, p.currency_preference]));
+  // RLS scopes every row to the signed-in user (0013_strict_isolation.sql),
+  // so there is no longer any such thing as "someone else's account" here.
+  const myAccounts = accounts.filter((a) => !a.is_parent_account);
+  const parentAccounts = accounts.filter((a) => a.is_parent_account);
 
-  const ownAccounts = accounts.filter((a) => a.user_id === user?.id);
-  const myAccounts = ownAccounts.filter((a) => !a.is_parent_account);
-  const parentAccounts = ownAccounts.filter((a) => a.is_parent_account);
-  const otherAccounts = accounts.filter((a) => a.user_id !== user?.id);
-
-  // Net worth / month in / month out are scoped to the viewer's own
-  // accounts only — summing balances across the OWNER's NPR accounts and
-  // the PARTNER's AUD accounts into one number would be financially
-  // meaningless without an FX conversion this app doesn't do. Parent
-  // accounts are excluded too (they're listed separately below): they're
-  // money this user administers, not money they own.
+  // Parent accounts stay out of net worth / month in / month out: that money
+  // is administered, not owned (they get their own section below).
   const ownAccountIds = new Set(myAccounts.map((a) => a.id));
   // Unbounded-by-recency (unlike the 50-row "recent transactions" list) so
   // month stats and the category chart below don't silently under-count
@@ -127,7 +137,7 @@ async function WalletSummary() {
     .filter((t) => t.amount < 0)
     .reduce((sum, t) => sum + Math.abs(t.amount), 0);
 
-  const chartData = ownAccounts.map((a) => ({
+  const chartData = accounts.map((a) => ({
     name: a.account_name,
     balance: a.current_balance,
   }));
@@ -179,7 +189,7 @@ async function WalletSummary() {
         />
       </div>
 
-      {ownAccounts.length > 0 ? (
+      {accounts.length > 0 ? (
         <div className="border-border/60 bg-card rounded-xl border p-4">
           <h2 className="mb-3 text-sm font-medium">Balances</h2>
           <BalanceChart data={chartData} />
@@ -217,42 +227,28 @@ async function WalletSummary() {
         </section>
       ) : null}
 
-      {otherAccounts.length > 0 ? (
-        <section className="flex flex-col gap-3">
-          <h2 className="text-sm font-medium">
-            {isOwner ? "Partner's accounts" : "Shared accounts"}
-          </h2>
-          {otherAccounts.map((a) => (
-            <AccountCard
-              key={a.id}
-              account={a}
-              currency={currencyByUserId.get(a.user_id) ?? currency}
-            />
-          ))}
-        </section>
-      ) : null}
     </>
   );
 }
 
+// The account filter needs the account list, so this streams in its own
+// boundary rather than blocking the whole page on it.
+async function WalletFilters() {
+  const { accounts } = await getWalletAccountsData();
+  return <TransactionFilters accounts={accounts} />;
+}
+
 async function WalletRecurringTransactions() {
-  const [{ accounts, user, profile }, items] = await Promise.all([
+  const [{ accounts, profile }, items] = await Promise.all([
     getWalletAccountsData(),
     getRecurringTransactionsData(),
   ]);
   const currency = profile?.currency_preference ?? "AUD";
 
-  const ownAccounts = accounts.filter((a) => a.user_id === user?.id);
-  const myItems = items.filter((b) => b.user_id === user?.id);
-  const otherItems = items.filter((b) => b.user_id !== user?.id);
-
   return (
     <>
-      <RecurringTransactionForm accounts={ownAccounts} />
-      <RecurringTransactionList items={myItems} accounts={accounts} currency={currency} />
-      {otherItems.length > 0 ? (
-        <RecurringTransactionList items={otherItems} accounts={accounts} currency={currency} />
-      ) : null}
+      <RecurringTransactionForm accounts={accounts} />
+      <RecurringTransactionList items={items} accounts={accounts} currency={currency} />
     </>
   );
 }
@@ -262,29 +258,36 @@ async function WalletTransactions({
 }: {
   searchParams: Promise<WalletSearchParams>;
 }) {
-  const { category, from, to, q } = await searchParams;
+  const { category, type, account, from, to, q, min, max } = await searchParams;
   const filters: TransactionFiltersType = {
     category: category && CATEGORY_ORDER.includes(category as ExpenseCategory)
       ? (category as ExpenseCategory)
       : undefined,
+    type: TRANSACTION_TYPES.includes(type as (typeof TRANSACTION_TYPES)[number])
+      ? (type as (typeof TRANSACTION_TYPES)[number])
+      : undefined,
+    accountId: account || undefined,
     from: from || undefined,
     to: to || undefined,
     q: q || undefined,
+    min: positiveNumber(min),
+    max: positiveNumber(max),
   };
 
-  const [{ accounts, profile, profiles }, transactions] = await Promise.all([
+  const [{ accounts, profile }, page] = await Promise.all([
     getWalletAccountsData(),
     getWalletTransactionsData(filters),
   ]);
   const currency = profile?.currency_preference ?? "AUD";
-  const currencyByUserId = new Map(profiles.map((p) => [p.id, p.currency_preference]));
 
   return (
-    <ConnectedTransactionList
-      transactions={transactions}
+    <TransactionFeed
+      key={JSON.stringify(filters)}
+      initialItems={page.items}
+      initialCursor={page.nextCursor}
+      filters={filters}
       accounts={accounts}
-      currencyByUserId={currencyByUserId}
-      fallbackCurrency={currency}
+      currency={currency}
     />
   );
 }

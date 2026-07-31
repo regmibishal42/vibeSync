@@ -1,4 +1,5 @@
-import { LogOut } from "lucide-react";
+import { LogOut, Settings } from "lucide-react";
+import Link from "next/link";
 
 import { signOut } from "@/app/(app)/actions";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -47,6 +48,12 @@ export function AppHeader({
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end">
           <div className="px-2 py-1.5 text-sm font-medium">{fullName}</div>
+          <DropdownMenuItem asChild>
+            <Link href="/settings">
+              <Settings />
+              Settings
+            </Link>
+          </DropdownMenuItem>
           <form action={signOut}>
             <DropdownMenuItem asChild variant="destructive">
               <button type="submit" className="w-full">

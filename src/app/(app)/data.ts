@@ -5,6 +5,14 @@ import { createClient } from "@/lib/supabase/server";
 import { getCurrentProfile, getCurrentUser } from "@/lib/supabase/profile";
 import { CACHE_TAGS } from "@/lib/cache-tags";
 
+export type DashboardSummary = {
+  income: number;
+  expense: number;
+  byCategory: { label: string; amount: number }[];
+  byAccount: { label: string; amount: number }[];
+  byJob: { label: string; amount: number }[];
+};
+
 // 'use cache: private' on every fetcher below — cached only in this
 // browser's own memory (never persisted server-side), so tab-switching
 // between Home/Work/Wallet/Loans and coming back within the 30s
@@ -17,59 +25,46 @@ export const getDashboardAccountsData = cache(async () => {
   cacheTag(CACHE_TAGS.dashboardAccounts);
   cacheLife("seconds");
 
-  const [profile, user, supabase] = await Promise.all([
-    getCurrentProfile(),
-    getCurrentUser(),
-    createClient(),
-  ]);
+  const [profile, supabase] = await Promise.all([getCurrentProfile(), createClient()]);
   const { data: accounts } = await supabase.from("accounts").select("*");
 
-  return { profile, user, accounts: accounts ?? [] };
+  return { profile, accounts: accounts ?? [] };
 });
 
-// 90 days is enough headroom for both the "this week"/"this month" toggle
-// and the 14-day earnings-style charts without scanning full history on
-// every dashboard load.
-export const getDashboardTransactionsData = cache(async () => {
-  "use cache: private";
-  cacheTag(CACHE_TAGS.dashboardTransactions);
-  cacheLife("seconds");
+// Aggregated in Postgres rather than by shipping the raw ledger to the
+// client and reducing it here. That mattered less when the dashboard only
+// ever looked back 90 days; with ranges now reaching a full year it would
+// mean downloading thousands of rows to render about eight numbers.
+//
+// Bounds are ISO instants computed in the viewer's own timezone (see
+// resolveRange in lib/dashboard.ts) so boundary-day transactions land in the
+// bucket the user expects.
+export const getDashboardSummary = cache(
+  async (fromISO: string, toISO: string): Promise<DashboardSummary> => {
+    "use cache: private";
+    cacheTag(CACHE_TAGS.dashboardTransactions);
+    cacheLife("seconds");
 
-  const supabase = await createClient();
-  const since = new Date();
-  since.setDate(since.getDate() - 90);
+    const supabase = await createClient();
+    const { data } = await supabase.rpc("dashboard_summary", {
+      p_from: fromISO,
+      p_to: toISO,
+    });
 
-  const { data } = await supabase
-    .from("transactions")
-    .select("*")
-    .gte("transaction_date", since.toISOString());
+    return (
+      (data as DashboardSummary | null) ?? {
+        income: 0,
+        expense: 0,
+        byCategory: [],
+        byAccount: [],
+        byJob: [],
+      }
+    );
+  }
+);
 
-  return data ?? [];
-});
-
-export const getDashboardJobsData = cache(async () => {
-  "use cache: private";
-  cacheTag(CACHE_TAGS.dashboardJobs);
-  cacheLife("seconds");
-
-  const supabase = await createClient();
-  const since = new Date();
-  since.setDate(since.getDate() - 90);
-
-  const [{ data: jobs }, { data: shifts }] = await Promise.all([
-    supabase.from("jobs").select("*"),
-    supabase
-      .from("job_shifts")
-      .select("*")
-      .gte("shift_date", since.toISOString().slice(0, 10)),
-  ]);
-
-  return { jobs: jobs ?? [], shifts: shifts ?? [] };
-});
-
-// Explicitly scoped to `user_id = user.id`, NOT the raw is_owner()-bypassed
-// fetch used elsewhere — each person's home page shows only their own
-// upcoming bills/salary, never mixed with the other's.
+// Scoped to `user_id = user.id` explicitly. RLS already enforces this, but
+// stating it here keeps the intent obvious at the call site.
 export const getDashboardRecurringData = cache(async () => {
   "use cache: private";
   cacheTag(CACHE_TAGS.dashboardRecurring);

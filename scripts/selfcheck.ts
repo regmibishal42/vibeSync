@@ -8,7 +8,7 @@
 // mocked here — it's verified against a real Supabase project instead.
 import assert from "node:assert/strict";
 
-import { isInPeriod } from "../src/lib/dashboard";
+import { resolveRange } from "../src/lib/dashboard";
 import { escapeLikePattern } from "../src/lib/wallet/search";
 import { formatCurrency } from "../src/lib/format";
 import { calculateShiftPay, roundCurrency } from "../src/lib/calculations/job-pay";
@@ -21,33 +21,61 @@ function check(name: string, fn: () => void) {
   console.log(`  ✓ ${name}`);
 }
 
-console.log("\nisInPeriod — weeks run Monday..Sunday");
+console.log("\nresolveRange — weeks run Monday..Sunday, months are calendar months");
 
-// Guard the fixtures themselves: if these ever stop being the weekdays the
-// cases below assume, fail loudly rather than pass for the wrong reason.
+// Guard the fixtures themselves: if these stop being the weekdays the cases
+// below assume, fail loudly rather than pass for the wrong reason.
 const sunday = new Date("2026-08-02T12:00:00");
 const nextMonday = new Date("2026-08-03T12:00:00");
+const lateJuly = new Date("2026-07-30T12:00:00");
 assert.equal(sunday.getDay(), 0, "fixture 2026-08-02 should be a Sunday");
 assert.equal(nextMonday.getDay(), 1, "fixture 2026-08-03 should be a Monday");
+
+const ymd = (d: Date) =>
+  `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 
 check("Sunday still belongs to the week that began the preceding Monday", () => {
   // The classic off-by-one: a naive getDay() week-start rolls over on Sunday
   // and orphans Mon-Sat from their own week.
-  assert.equal(isInPeriod("2026-07-30", "week", sunday), true);
-  assert.equal(isInPeriod("2026-07-27", "week", sunday), true);
+  assert.equal(ymd(resolveRange("week", sunday).from), "2026-07-27");
 });
 
-check("the preceding Sunday is excluded once a new week starts", () => {
-  assert.equal(isInPeriod("2026-08-02", "week", nextMonday), false);
-  assert.equal(isInPeriod("2026-08-03", "week", nextMonday), true);
+check("a new week starts on Monday", () => {
+  assert.equal(ymd(resolveRange("week", nextMonday).from), "2026-08-03");
 });
 
-check("month buckets are calendar months, not rolling 30 days", () => {
-  const lateJuly = new Date("2026-07-30T12:00:00");
-  assert.equal(isInPeriod("2026-07-01", "month", lateJuly), true);
-  assert.equal(isInPeriod("2026-08-01", "month", lateJuly), false);
-  // Same month number, different year — must not collide.
-  assert.equal(isInPeriod("2025-07-15", "month", lateJuly), false);
+check("month starts on the 1st, not 30 days back", () => {
+  assert.equal(ymd(resolveRange("month", lateJuly).from), "2026-07-01");
+});
+
+check("6 months spans five whole months plus the current one", () => {
+  assert.equal(ymd(resolveRange("6months", lateJuly).from), "2026-02-01");
+});
+
+check("year starts on Jan 1 of the current year", () => {
+  assert.equal(ymd(resolveRange("year", lateJuly).from), "2026-01-01");
+});
+
+check("ranges end at the very end of the closing day", () => {
+  const to = resolveRange("month", lateJuly).to;
+  assert.equal(ymd(to), "2026-07-30");
+  assert.equal(to.getHours(), 23);
+  assert.equal(to.getMinutes(), 59);
+});
+
+check("custom bounds are honoured, and reversed bounds are swapped", () => {
+  const normal = resolveRange("custom", lateJuly, "2026-03-05", "2026-04-10");
+  assert.equal(ymd(normal.from), "2026-03-05");
+  assert.equal(ymd(normal.to), "2026-04-10");
+
+  const reversed = resolveRange("custom", lateJuly, "2026-04-10", "2026-03-05");
+  assert.equal(ymd(reversed.from), "2026-03-05");
+  assert.equal(ymd(reversed.to), "2026-04-10");
+});
+
+check("a broken custom range falls back to the current month, never empty", () => {
+  assert.equal(ymd(resolveRange("custom", lateJuly, "nonsense", "").from), "2026-07-01");
+  assert.equal(ymd(resolveRange("custom", lateJuly).from), "2026-07-01");
 });
 
 console.log("\nescapeLikePattern — search input is data, not wildcards");

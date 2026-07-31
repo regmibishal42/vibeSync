@@ -348,6 +348,16 @@ export type Database = {
         };
         Returns: Database["public"]["Tables"]["loans"]["Row"];
       };
+      dashboard_summary: {
+        Args: { p_from: string; p_to: string };
+        Returns: {
+          income: number;
+          expense: number;
+          byCategory: { label: string; amount: number }[];
+          byAccount: { label: string; amount: number }[];
+          byJob: { label: string; amount: number }[];
+        };
+      };
       delete_transaction: {
         Args: { p_transaction_id: string };
         Returns: number;

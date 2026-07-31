@@ -16,13 +16,13 @@ type Account = Database["public"]["Tables"]["accounts"]["Row"];
 export function TransactionList({
   transactions,
   accounts,
-  currencyByUserId,
-  fallbackCurrency,
+  currency,
+  onDeleted,
 }: {
   transactions: Transaction[];
   accounts: Account[];
-  currencyByUserId: Map<string, string>;
-  fallbackCurrency: string;
+  currency: string;
+  onDeleted?: () => void;
 }) {
   if (transactions.length === 0) {
     return (
@@ -42,8 +42,6 @@ export function TransactionList({
       {transactions.map((tx) => {
         const isInflow = tx.amount >= 0;
         const account = accountById.get(tx.account_id);
-        const currency =
-          (account && currencyByUserId.get(account.user_id)) ?? fallbackCurrency;
         const AccountIcon = account ? ACCOUNT_TYPE_ICON[account.account_type] : null;
 
         return (
@@ -97,6 +95,7 @@ export function TransactionList({
                       (tx.category ? CATEGORY_META[tx.category].label : tx.type)
                     }
                     currency={currency}
+                    onDeleted={onDeleted}
                   />
                 </>
               )}
