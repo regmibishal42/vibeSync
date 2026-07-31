@@ -26,12 +26,14 @@ export function DeleteTransactionButton({
   amount,
   label,
   currency,
+  onDeleted,
 }: {
   transactionId: string;
   type: TransactionType;
   amount: number;
   label: string;
   currency: string;
+  onDeleted?: () => void;
 }) {
   const [open, setOpen] = useState(false);
   const [isPending, startTransition] = useTransition();
@@ -50,6 +52,7 @@ export function DeleteTransactionButton({
       }
       toast.success("Transaction deleted");
       setOpen(false);
+      onDeleted?.();
       router.refresh();
     });
   }

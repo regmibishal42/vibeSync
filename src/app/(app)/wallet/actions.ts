@@ -7,6 +7,12 @@ import { createClient } from "@/lib/supabase/server";
 import { CATEGORY_ORDER } from "@/lib/wallet/categories";
 import { insertSignedTransaction, transferLabels } from "@/lib/wallet/create-transaction";
 import { CACHE_TAGS } from "@/lib/cache-tags";
+import {
+  fetchTransactionPage,
+  type TransactionCursor,
+  type TransactionFilters,
+  type TransactionPage,
+} from "@/lib/wallet/transaction-query";
 import type { ExpenseCategory } from "@/lib/types/database.types";
 
 const categoryEnum = CATEGORY_ORDER as [ExpenseCategory, ...ExpenseCategory[]];
@@ -224,4 +230,25 @@ export async function deleteTransaction(transactionId: string): Promise<ActionRe
   updateTag(CACHE_TAGS.dashboardAccounts);
   updateTag(CACHE_TAGS.dashboardTransactions);
   return { success: true };
+}
+
+// Next page of the ledger. Deliberately NOT a cached fetcher: each page is
+// requested once, on an explicit tap, so caching it would only grow the
+// private cache without ever being reused. Shares fetchTransactionPage with
+// the cached first page so filters and ordering can't drift apart.
+export async function loadMoreTransactions(
+  filters: TransactionFilters,
+  cursor: TransactionCursor
+): Promise<{ error?: string; page?: TransactionPage }> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) {
+    return { error: "Not signed in." };
+  }
+
+  const page = await fetchTransactionPage(supabase, filters, cursor);
+  return { page };
 }
