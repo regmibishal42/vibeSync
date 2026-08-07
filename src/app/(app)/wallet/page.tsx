@@ -17,6 +17,8 @@ import { AccountForm } from "@/components/wallet/account-form";
 import { QuickAddButton } from "@/components/wallet/quick-add-button";
 import { TransferForm } from "@/components/wallet/transfer-form";
 import { TransactionFeed } from "@/components/wallet/transaction-feed";
+import { EmptyState } from "@/components/ui/empty-state";
+import { Wallet } from "lucide-react";
 import { MonthSummary } from "@/components/wallet/month-summary";
 import { TransactionFilters } from "@/components/wallet/transaction-filters";
 import { RecurringTransactionForm } from "@/components/wallet/recurring-transaction-form";
@@ -148,11 +150,22 @@ async function WalletSummary() {
       ) : null}
 
 
-      <div className="flex gap-2">
-        <QuickAddButton accounts={quickAddAccounts} currency={currency} />
-        <TransferForm accounts={myAccounts} />
-        <AccountForm isOwner={isOwner} />
-      </div>
+      {accounts.length === 0 ? (
+        <EmptyState
+          icon={Wallet}
+          accent="finance"
+          title="Add your first account"
+          description="A bank account, a digital wallet, or cash in your pocket. Everything else — expenses, transfers, loans — hangs off one of these."
+          hint="You can add as many as you like, and move money between them later."
+          action={<AccountForm isOwner={isOwner} />}
+        />
+      ) : (
+        <div className="flex gap-2">
+          <QuickAddButton accounts={quickAddAccounts} currency={currency} />
+          <TransferForm accounts={myAccounts} />
+          <AccountForm isOwner={isOwner} />
+        </div>
+      )}
 
       {myAccounts.length > 0 ? (
         <section className="flex flex-col gap-3">

@@ -1,6 +1,7 @@
 import { ArrowDownLeft, ArrowUpRight, Loader2, Receipt } from "lucide-react";
 
 import { Card } from "@/components/ui/card";
+import { EmptyState } from "@/components/ui/empty-state";
 import { cn } from "@/lib/utils";
 import { formatCurrency } from "@/lib/format";
 import { ACCOUNT_TYPE_ICON } from "@/lib/wallet/account-type";
@@ -26,12 +27,13 @@ export function TransactionList({
 }) {
   if (transactions.length === 0) {
     return (
-      <Card className="items-center justify-center py-10 text-center">
-        <Receipt className="text-muted-foreground mx-auto size-8" />
-        <p className="text-muted-foreground px-4 text-sm">
-          No transactions yet.
-        </p>
-      </Card>
+      <EmptyState
+        icon={Receipt}
+        accent="finance"
+        title="No transactions yet"
+        description="Every expense, deposit and transfer lands here, newest first."
+        hint="Tap + at the bottom to add one — amount first, two taps done."
+      />
     );
   }
 

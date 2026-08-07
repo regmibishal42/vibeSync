@@ -10,6 +10,7 @@ import { StatGridSkeleton } from "@/components/skeletons/stat-grid-skeleton";
 import { ChartSkeleton } from "@/components/skeletons/chart-skeleton";
 import { ListSkeleton } from "@/components/skeletons/list-skeleton";
 import { JobForm } from "@/components/work/job-form";
+import { EmptyState } from "@/components/ui/empty-state";
 import { HoursThisMonth } from "@/components/work/hours-this-month";
 import { JobCard } from "@/components/work/job-card";
 import { PayoutBatchList } from "@/components/work/payout-batch-list";
@@ -82,16 +83,22 @@ async function WorkSummary() {
         </div>
       ) : null}
 
-      <div className="flex items-center justify-between">
-        <h2 className="text-lg font-semibold">Jobs</h2>
-        <JobForm accounts={accounts} />
-      </div>
+      {jobs.length > 0 ? (
+        <div className="flex items-center justify-between">
+          <h2 className="text-lg font-semibold">Jobs</h2>
+          <JobForm accounts={accounts} />
+        </div>
+      ) : null}
 
       {jobs.length === 0 ? (
-        <p className="text-muted-foreground text-sm">
-          No jobs yet — add a full-time, part-time, hourly, or salaried job to
-          start tracking income.
-        </p>
+        <EmptyState
+          icon={Briefcase}
+          accent="shift"
+          title="No jobs yet"
+          description="Add where your money comes from — full-time or part-time, paid hourly or on a salary."
+          hint="Hourly jobs track shifts and settle into payouts. Salaried jobs post automatically on payday."
+          action={<JobForm accounts={accounts} />}
+        />
       ) : (
         <div className="flex flex-col gap-3">
           {jobs.map((job) => (
