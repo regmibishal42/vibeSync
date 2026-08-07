@@ -33,10 +33,13 @@ export default function AppShellLayout({
   );
 }
 
-// Header/nav/FAB data. Cached rather than re-queried, because this used to
-// run two Supabase round trips on every single entry — the profile lookup
-// plus the FAB's account list. React's `cache()` only dedupes within one
-// request, so it did nothing across navigations.
+// Header/nav/FAB data, behind one cached fetcher instead of two ad-hoc
+// queries inline.
+//
+// Honest scope: `'use cache: private'` is browser-memory only, so this does
+// not reduce server work on a page load — the queries still run per request.
+// What it buys is reuse across client navigations within a session, plus a
+// single named place to tag (so adding an account refreshes the FAB picker).
 //
 // Tagged with walletAccounts so adding or renaming an account refreshes the
 // FAB's picker immediately, and profiles so a currency change lands.
