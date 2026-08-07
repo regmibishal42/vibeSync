@@ -55,3 +55,8 @@ supabase/.temp
 # Claude Code — project-level settings.json (if any) is intentionally
 # tracked for the team; only the personal local-override file is not
 .claude/settings.local.json
+
+# playwright
+/test-results/
+/playwright-report/
+/blob-report/
