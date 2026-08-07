@@ -1,7 +1,7 @@
 import { Suspense } from "react";
+import { connection } from "next/server";
 import Link from "next/link";
 import { Briefcase, HandCoins, Wallet } from "lucide-react";
-import { differenceInCalendarDays } from "date-fns";
 
 import {
   getDashboardAccountsData,
@@ -10,6 +10,7 @@ import {
   getDashboardLoanBalancesData,
 } from "@/app/(app)/data";
 import { NetWorthCard } from "@/components/dashboard/net-worth-card";
+import { Greeting } from "@/components/dashboard/greeting";
 import { PeriodBreakdown } from "@/components/dashboard/period-breakdown";
 import { RangePicker } from "@/components/dashboard/range-picker";
 import { UpcomingBillsWidget, type UpcomingBill } from "@/components/dashboard/upcoming-bills";
@@ -18,7 +19,7 @@ import { StatGridSkeleton } from "@/components/skeletons/stat-grid-skeleton";
 import { ChartSkeleton } from "@/components/skeletons/chart-skeleton";
 import { ListSkeleton } from "@/components/skeletons/list-skeleton";
 import { Card } from "@/components/ui/card";
-import { formatCurrency, todayLocalISO } from "@/lib/format";
+import { formatCurrency } from "@/lib/format";
 import {
   RANGE_ORDER,
   formatRangeLabel,
@@ -26,14 +27,11 @@ import {
   type RangeKey,
 } from "@/lib/dashboard";
 
+// Validated at build time to produce an instant static shell on client
+// navigation. `runtime` rather than `static` because this route reads
+// searchParams (the range picker) — the sample below is the default entry,
+// no params, which is what a tab switch actually hits.
 type HomeSearchParams = { range?: string; from?: string; to?: string };
-
-function greeting() {
-  const hour = new Date().getHours();
-  if (hour < 12) return "Good morning";
-  if (hour < 18) return "Good afternoon";
-  return "Good evening";
-}
 
 function parseRangeKey(raw: string | undefined): RangeKey {
   return RANGE_ORDER.includes(raw as RangeKey) ? (raw as RangeKey) : "month";
@@ -76,29 +74,23 @@ async function HomeHero() {
   const ownAccounts = accounts.filter((a) => !a.is_parent_account);
   const netWorth = ownAccounts.reduce((sum, a) => sum + a.current_balance, 0);
 
-  const today = todayLocalISO();
-  const upcomingBillsTotal = recurring
+  // Which of these fall inside the forecast window is decided client-side,
+  // against the viewer's own clock — see NetWorthCard.
+  const upcomingBills = recurring
     .filter((r) => r.direction === "EXPENSE")
-    .filter(
-      (r) =>
-        differenceInCalendarDays(
-          new Date(`${r.next_due_date}T00:00:00`),
-          new Date(`${today}T00:00:00`)
-        ) <= 14
-    )
-    .reduce((sum, r) => sum + r.amount, 0);
+    .map((r) => ({ amount: r.amount, next_due_date: r.next_due_date }));
 
   return (
     <div>
       <div className="mb-4">
-        <p className="text-muted-foreground text-sm">{greeting()},</p>
+        <Greeting />
         <h1 className="text-2xl font-semibold">{profile?.full_name}</h1>
       </div>
 
       <NetWorthCard
         netWorth={netWorth}
         currency={currency}
-        upcomingBillsTotal={upcomingBillsTotal}
+        upcomingBills={upcomingBills}
       />
     </div>
   );
@@ -111,6 +103,17 @@ async function PeriodSection({
 }) {
   const { range, from, to } = await searchParams;
   const rangeKey = parseRangeKey(range);
+
+  // Presets ("this week", "this month") need to know what *now* is, which
+  // makes this request-time work — `connection()` is the sanctioned way to
+  // say so. It only marks this section dynamic, and it already streams
+  // behind <Suspense>, so the page shell stays instant on tab switch.
+  //
+  // Caveat worth knowing: "now" here is the server's clock, so a preset's
+  // boundary can sit a few hours off for a viewer far from UTC. Only
+  // transactions right at the edge of a range are affected; picking an
+  // explicit custom range side-steps it entirely.
+  await connection();
   const resolved = resolveRange(rangeKey, new Date(), from, to);
 
   const [{ profile }, summary] = await Promise.all([

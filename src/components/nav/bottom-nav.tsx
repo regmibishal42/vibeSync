@@ -24,7 +24,7 @@ export function BottomNav() {
 
   return (
     <nav
-      className="border-border/60 bg-card/95 fixed inset-x-0 bottom-0 z-40 border-t backdrop-blur-lg"
+      className="vt-bottom-nav border-border/60 bg-card/95 fixed inset-x-0 bottom-0 z-40 border-t backdrop-blur-lg"
       style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
     >
       <div

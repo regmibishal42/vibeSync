@@ -161,3 +161,61 @@
     scrollbar-width: none;
   }
 }
+
+/* ── Motion ───────────────────────────────────────────────────────────────
+   `viewTransition` was enabled in next.config.ts but nothing ever opted in,
+   so navigation was a hard cut. This turns on the browser's native
+   cross-fade between tabs — GPU-composited, zero JS, no library.
+
+   Every rule below is wrapped so it disappears entirely under
+   prefers-reduced-motion: for anyone who has asked the OS for less motion,
+   animation is a barrier, not polish. */
+@media (prefers-reduced-motion: no-preference) {
+  @view-transition {
+    navigation: auto;
+  }
+
+  ::view-transition-old(root) {
+    animation: vs-fade-out 90ms cubic-bezier(0.4, 0, 1, 1) both;
+  }
+  ::view-transition-new(root) {
+    animation: vs-fade-in 180ms cubic-bezier(0, 0, 0.2, 1) both;
+  }
+
+  /* The shell is persistent furniture — cross-fading it makes the whole page
+     look like it reloaded, which is exactly the impression to avoid. Held
+     still while only the content beneath it transitions. */
+  ::view-transition-group(app-header),
+  ::view-transition-group(bottom-nav) {
+    animation: none;
+  }
+}
+
+@keyframes vs-fade-out {
+  to {
+    opacity: 0;
+  }
+}
+
+@keyframes vs-fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+}
+
+@layer utilities {
+  /* Opt a persistent element out of the page transition by name. */
+  .vt-app-header {
+    view-transition-name: app-header;
+  }
+  .vt-bottom-nav {
+    view-transition-name: bottom-nav;
+  }
+
+  /* Numbers that update in place (balances, totals) should line up column-wise
+     so digits don't jitter as values change. */
+  .nums {
+    font-variant-numeric: tabular-nums;
+  }
+}

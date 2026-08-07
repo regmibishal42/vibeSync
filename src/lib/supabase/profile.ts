@@ -1,31 +1,24 @@
 import "server-only";
 import { cache } from "react";
-import { headers } from "next/headers";
 
 import { createClient } from "@/lib/supabase/server";
 import type { Database } from "@/lib/types/database.types";
 
 export type Profile = Database["public"]["Tables"]["profiles"]["Row"];
 
-// Fast path: proxy.ts's middleware (see updateSession() in
-// lib/supabase/proxy.ts) already ran auth.getUser() once for this exact
-// request and stamped the verified id onto a request header — every caller
-// here would otherwise redundantly repeat that same network round trip to
-// Supabase's Auth server on every single navigation and Server Action call.
-// Falls back to a real getUser() call if the header is ever missing (e.g. a
-// future route excluded from proxy's matcher), so this is never less
-// correct, only usually faster. Only `.id` is used anywhere in this app —
-// see the grep-verified note below — so the return type is narrowed rather
-// than carrying the full (unused) supabase-js User shape.
+// `auth.getUser()` is a real round trip to Supabase's Auth server — it
+// validates the JWT rather than just decoding it, which is the reason to
+// prefer it over getSession().
 //
-// (No call site anywhere reads anything off the user besides `.id` — if
-// that ever changes, this needs to fall back to the full object instead.)
+// An earlier version skipped that round trip by having proxy.ts stamp the
+// verified id onto a custom request header. That was removed deliberately:
+// reading a non-standard header made every route dynamic, which blocked the
+// instant static shell (Next's instant validation rejects it outright), and
+// the cost it saved has since evaporated — every caller now sits inside a
+// `'use cache: private'` scope with a multi-minute life, so this runs on a
+// cache miss rather than on every navigation. Fewer moving parts, no bespoke
+// trust channel, and faster in the way that actually matters.
 export const getCurrentUser = cache(async (): Promise<{ id: string } | null> => {
-  const headerUserId = (await headers()).get("x-vibesync-user-id");
-  if (headerUserId) {
-    return { id: headerUserId };
-  }
-
   const supabase = await createClient();
   const {
     data: { user },
@@ -34,9 +27,9 @@ export const getCurrentUser = cache(async (): Promise<{ id: string } | null> => 
 });
 
 // Resolves "who is this and what should they see". Proxy already guarantees
-// a session exists past this point, so a missing profile here means the
-// two seed accounts haven't been provisioned yet rather than a normal
-// unauthenticated state.
+// a session exists past this point, so a missing profile here means the two
+// accounts haven't been provisioned yet rather than a normal unauthenticated
+// state.
 export const getCurrentProfile = cache(async (): Promise<Profile | null> => {
   const user = await getCurrentUser();
   if (!user) return null;

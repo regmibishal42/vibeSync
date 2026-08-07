@@ -23,7 +23,7 @@ export type DashboardSummary = {
 export const getDashboardAccountsData = cache(async () => {
   "use cache: private";
   cacheTag(CACHE_TAGS.dashboardAccounts);
-  cacheLife("seconds");
+  cacheLife("minutes");
 
   const [profile, supabase] = await Promise.all([getCurrentProfile(), createClient()]);
   const { data: accounts } = await supabase.from("accounts").select("*");
@@ -43,7 +43,7 @@ export const getDashboardSummary = cache(
   async (fromISO: string, toISO: string): Promise<DashboardSummary> => {
     "use cache: private";
     cacheTag(CACHE_TAGS.dashboardTransactions);
-    cacheLife("seconds");
+    cacheLife("minutes");
 
     const supabase = await createClient();
     const { data } = await supabase.rpc("dashboard_summary", {
@@ -68,7 +68,7 @@ export const getDashboardSummary = cache(
 export const getDashboardRecurringData = cache(async () => {
   "use cache: private";
   cacheTag(CACHE_TAGS.dashboardRecurring);
-  cacheLife("seconds");
+  cacheLife("minutes");
 
   const [user, supabase] = await Promise.all([getCurrentUser(), createClient()]);
   if (!user) return [];
@@ -86,7 +86,7 @@ export const getDashboardRecurringData = cache(async () => {
 export const getDashboardLoanBalancesData = cache(async () => {
   "use cache: private";
   cacheTag(CACHE_TAGS.dashboardLoans);
-  cacheLife("seconds");
+  cacheLife("minutes");
 
   const supabase = await createClient();
   const { data } = await supabase.from("loan_balances").select("*");

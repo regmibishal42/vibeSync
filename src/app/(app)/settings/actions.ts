@@ -66,6 +66,13 @@ export async function changeOwnPassword(
     return { error: error.message };
   }
 
+  // Changing a password should end sessions elsewhere — otherwise a device
+  // that was already signed in keeps full access, which defeats the point of
+  // rotating a password you think someone else has seen. `scope: "others"`
+  // leaves this device signed in, so the user isn't kicked out of the screen
+  // they're standing on.
+  await supabase.auth.signOut({ scope: "others" });
+
   return { success: true };
 }
 
@@ -157,5 +164,11 @@ export async function changePartnerPassword(
     return { error: error.message };
   }
 
+  // Known limitation: the target's *existing* sessions survive this. The
+  // admin signOut endpoint is keyed by the user's own JWT, which by
+  // definition we don't hold here, so there's no server-side way to revoke
+  // them with the service-role key alone. If that account is believed
+  // compromised, the reliable move is still Supabase's dashboard (or a short
+  // JWT expiry). Called out rather than left as a silent assumption.
   return { success: true };
 }

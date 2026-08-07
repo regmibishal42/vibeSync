@@ -28,7 +28,7 @@ import {
 export const getWalletAccountsData = cache(async () => {
   "use cache: private";
   cacheTag(CACHE_TAGS.walletAccounts);
-  cacheLife("seconds");
+  cacheLife("minutes");
 
   const [profile, supabase] = await Promise.all([getCurrentProfile(), createClient()]);
   const { data: accounts } = await supabase
@@ -48,7 +48,7 @@ export type { TransactionFilters } from "@/lib/wallet/transaction-query";
 export const getWalletTransactionsData = cache(async (filters: TransactionFilters = {}) => {
   "use cache: private";
   cacheTag(CACHE_TAGS.walletTransactions);
-  cacheLife("seconds");
+  cacheLife("minutes");
 
   const supabase = await createClient();
   return fetchTransactionPage(supabase, filters);
@@ -62,7 +62,7 @@ export const getWalletTransactionsData = cache(async (filters: TransactionFilter
 export const getWalletMonthTransactionsData = cache(async () => {
   "use cache: private";
   cacheTag(CACHE_TAGS.walletTransactions);
-  cacheLife("seconds");
+  cacheLife("minutes");
 
   const supabase = await createClient();
   const now = new Date();
@@ -79,7 +79,7 @@ export const getWalletMonthTransactionsData = cache(async () => {
 export const getRecurringTransactionsData = cache(async () => {
   "use cache: private";
   cacheTag(CACHE_TAGS.recurringTransactions);
-  cacheLife("seconds");
+  cacheLife("minutes");
 
   const supabase = await createClient();
   const { data } = await supabase

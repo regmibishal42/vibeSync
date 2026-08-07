@@ -18,4 +18,5 @@ export const CACHE_TAGS = {
   workJobs: "work-jobs",
   workPayoutBatches: "work-payout-batches",
   loans: "loans",
+  profile: "profile",
 } as const;
