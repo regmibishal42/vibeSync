@@ -1,7 +1,6 @@
 import type { NextRequest } from "next/server";
 
 import { createClient } from "@/lib/supabase/server";
-import { getCurrentProfile } from "@/lib/supabase/profile";
 import { toCsv } from "@/lib/csv";
 import { ACCOUNT_TYPE_LABEL } from "@/lib/wallet/account-type";
 import { CATEGORY_META } from "@/lib/wallet/categories";
@@ -21,17 +20,15 @@ export async function GET(request: NextRequest) {
     return new Response("Unauthorized", { status: 401 });
   }
 
-  const profile = await getCurrentProfile();
   const { searchParams } = new URL(request.url);
   const category = searchParams.get("category");
   const from = searchParams.get("from");
   const to = searchParams.get("to");
   const q = searchParams.get("q");
-  // Household-wide export is opt-in and OWNER-only — the default scope is
-  // always the viewer's own transactions, for both roles. Unscoped export
-  // would otherwise mix the OWNER's NPR and the PARTNER's AUD transactions
-  // with no way to tell them apart.
-  const wantsAll = searchParams.get("scope") === "all" && profile?.role === "OWNER";
+  // There is deliberately no cross-account export any more. Strict isolation
+  // (0013) means RLS returns only the caller's own rows regardless, so the
+  // old `?scope=all` branch could no longer do what its name claimed —
+  // keeping it would have advertised a capability that silently does nothing.
 
   let query = supabase
     .from("transactions")
@@ -52,9 +49,8 @@ export async function GET(request: NextRequest) {
   const accountById = new Map((accounts ?? []).map((a) => [a.id, a]));
   const profileById = new Map((profiles ?? []).map((p) => [p.id, p]));
 
-  const scoped = wantsAll
-    ? (transactions ?? [])
-    : (transactions ?? []).filter((t) => t.user_id === user.id);
+  // Belt-and-braces: RLS already restricts this to the caller.
+  const scoped = (transactions ?? []).filter((t) => t.user_id === user.id);
 
   const rows = scoped.map((t) => {
     const account = accountById.get(t.account_id);
