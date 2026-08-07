@@ -110,6 +110,33 @@ and clean up rows the test created (delete transactions before accounts —
 `0012`'s guard deliberately blocks deleting an account that still has
 ledger history).
 
+## Never bulk-delete from this project
+
+**This project holds real data.** Both accounts are in day-to-day use — the
+PARTNER has entered real transactions, accounts, loans and jobs.
+
+This rule exists because it was already broken once: three transactions
+(`TRAVEL -11.00`, and an `Asmita` -50/+50 lend-and-repay pair) plus every
+account were deleted during cleanup, on the assumption they were leftover
+test rows. They were the user's own records, and they were not recoverable
+from the session.
+
+Before any `DELETE` against a live table:
+
+1. **Select and read the rows first.** Print enough to identify them —
+   including `created_at` and `user_id`, not just an amount.
+2. **Delete by explicit id**, never `?id=not.is.null` or an unfiltered match.
+3. **Tag test data unmistakably at creation** (a `ZZ_` name prefix, a
+   dedicated throwaway account) so cleanup can target that prefix alone.
+4. **If a row can't be positively identified as your own test artifact,
+   leave it.** Orphaned test rows cost nothing; deleted user records are
+   gone.
+
+Note that `0012`'s trigger blocking deletion of an account that still has
+transactions is a real safety net — deleting the transactions first defeats
+it. Treat hitting that guard as a signal to stop, not an obstacle to route
+around.
+
 ## Repo conventions
 
 - Migrations are numbered and **edited in place** while no production data
