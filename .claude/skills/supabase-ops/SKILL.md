@@ -41,12 +41,15 @@ run leaves a stale enum and the next attempt fails somewhere far away with a
 confusing message (this actually happened: a leftover `profile_role` from an
 `ADMIN`-era attempt made `0002` fail on `'OWNER'` being invalid).
 
-Since the project holds only two real accounts and no irreplaceable data,
-the reliable fix is to drop this app's own objects first, then re-run the
-migrations in order. The full drop list lives in
-`DOCUMENTATION.md#resetting-a-partially-applied-schema`. It touches only
+The reliable fix is to drop this app's own objects and re-run the migrations
+in order — but **that destroys all stored data, and this project now holds
+real records** (see "Never bulk-delete" below). Treat a full reset as a
+last resort requiring explicit confirmation from the user, not a routine
+recovery step. The drop list lives in
+`DOCUMENTATION.md#resetting-a-partially-applied-schema`; it touches only
 objects this app created — never `auth.users`, storage, or Supabase's own
-schema.
+schema. Prefer repairing the specific broken object (a single `create or
+replace function`, one `alter type`) over dropping everything.
 
 ## Verifying against the live database
 
@@ -105,10 +108,9 @@ earlier run silently keeps serving an old build — this produced a
 stale-process artifact. `lsof -ti:3000 | xargs kill -9`, then confirm the
 new server logged `✓ Ready` rather than `EADDRINUSE`.
 
-Afterwards: stop the server, delete any temp files holding session tokens,
-and clean up rows the test created (delete transactions before accounts —
-`0012`'s guard deliberately blocks deleting an account that still has
-ledger history).
+Afterwards: stop the server and delete any temp files holding session
+tokens. For test rows, follow "Never bulk-delete" below — delete the
+specific ids you created, and only those.
 
 ## Never bulk-delete from this project
 
