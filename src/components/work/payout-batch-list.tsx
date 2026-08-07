@@ -1,6 +1,7 @@
 import { HandCoins } from "lucide-react";
 
 import { Card } from "@/components/ui/card";
+import { EmptyState } from "@/components/ui/empty-state";
 import { formatCurrency } from "@/lib/format";
 import type { Database } from "@/lib/types/database.types";
 
@@ -17,12 +18,12 @@ export function PayoutBatchList({
 }) {
   if (batches.length === 0) {
     return (
-      <Card className="items-center justify-center py-10 text-center">
-        <HandCoins className="text-muted-foreground mx-auto size-8" />
-        <p className="text-muted-foreground px-4 text-sm">
-          No payout batches reconciled yet.
-        </p>
-      </Card>
+      <EmptyState
+        icon={HandCoins}
+        accent="warning"
+        title="No payouts settled yet"
+        description="When an hourly job pays out, settle it here — the pending shifts bundle into one payout and the deposit posts to your wallet."
+      />
     );
   }
 

@@ -27,7 +27,7 @@ export function AppHeader({
     .toUpperCase();
 
   return (
-    <header className="border-border/60 bg-background/80 sticky top-0 z-30 flex items-center justify-between border-b px-5 py-3 backdrop-blur-lg">
+    <header className="vt-app-header border-border/60 bg-background/80 sticky top-0 z-30 flex items-center justify-between border-b px-5 py-3 backdrop-blur-lg">
       <div className="flex items-center gap-2">
         <span className="from-finance via-shift to-fitness flex size-8 items-center justify-center rounded-lg bg-gradient-to-br text-xs font-bold text-white">
           VS

@@ -13,6 +13,10 @@ import { escapeLikePattern } from "../src/lib/wallet/search";
 import { formatCurrency } from "../src/lib/format";
 import { calculateShiftPay, roundCurrency } from "../src/lib/calculations/job-pay";
 import { transferLabels } from "../src/lib/wallet/create-transaction";
+import {
+  transactionCursorSchema,
+  transactionFiltersSchema,
+} from "../src/lib/wallet/transaction-query";
 
 let checks = 0;
 function check(name: string, fn: () => void) {
@@ -141,6 +145,45 @@ check("BANK -> CASH is a withdrawal, CASH -> BANK is a deposit", () => {
 check("everything else stays a plain transfer", () => {
   assert.equal(transferLabels("BANK", "BANK").out, "Transfer out");
   assert.equal(transferLabels("DIGITAL_WALLET", "BANK").in, "Transfer in");
+});
+
+
+console.log("\ntransaction filters/cursor — client input is validated, not trusted");
+
+check("a crafted cursor that breaks out of the filter string is rejected", () => {
+  // Server Action arguments are attacker-controlled; these land inside an
+  // interpolated PostgREST `.or(...)` predicate.
+  assert.equal(
+    transactionCursorSchema.safeParse({
+      date: '2026-01-01T00:00:00Z",id.gt."0',
+      id: "00000000-0000-0000-0000-000000000000",
+    }).success,
+    false
+  );
+  assert.equal(
+    transactionCursorSchema.safeParse({
+      date: "2026-01-01T00:00:00Z",
+      id: "not-a-uuid",
+    }).success,
+    false
+  );
+});
+
+check("a well-formed cursor still passes", () => {
+  assert.equal(
+    transactionCursorSchema.safeParse({
+      date: "2026-07-30T04:32:56.570584+00:00",
+      id: "d4f55656-9f39-492d-9134-8157ab00f501",
+    }).success,
+    true
+  );
+});
+
+check("filters reject unknown keys and non-numeric amounts", () => {
+  assert.equal(transactionFiltersSchema.safeParse({ bogus: 1 }).success, false);
+  assert.equal(transactionFiltersSchema.safeParse({ min: "5 or 1=1" }).success, false);
+  assert.equal(transactionFiltersSchema.safeParse({ category: "DROP" }).success, false);
+  assert.equal(transactionFiltersSchema.safeParse({ min: 5, q: "coffee" }).success, true);
 });
 
 console.log(`\n${checks} checks passed.\n`);

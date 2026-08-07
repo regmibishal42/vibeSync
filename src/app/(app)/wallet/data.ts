@@ -14,11 +14,14 @@ import {
 // back within the `cacheLife('seconds')` window (30s stale) is instant, with
 // zero cross-user leak risk since nothing is ever written to a shared store.
 // Every mutating Server Action calls `updateTag` for exactly the tags below
-// that it actually touches (not a blanket `revalidatePath`, which currently
-// busts every previously-visited page on next nav — see cache-tags.ts), so a
-// save on this device is instantly fresh without nuking unrelated tabs' cache.
-// A hard reload/new tab always re-executes this against Supabase fresh,
-// since private-cache functions are excluded from static-shell prerendering.
+// that it actually touches, rather than a blanket `revalidatePath`.
+//
+// Measured, not assumed: `cacheLife` here sets the browser-memory reuse
+// window only. It does NOT affect server-side prerendering — private cache
+// results are never stored on the server at all — and the router's own
+// stale-time (x-nextjs-stale-time: 300) comes from the default profile
+// either way. `minutes` is chosen deliberately for a longer in-session reuse
+// window, not as a fix for anything.
 //
 // Small + fast — accounts resolve well before the transactions query, so
 // this is its own fetcher/<Suspense> boundary in page.tsx: balances, charts,
@@ -28,7 +31,7 @@ import {
 export const getWalletAccountsData = cache(async () => {
   "use cache: private";
   cacheTag(CACHE_TAGS.walletAccounts);
-  cacheLife("seconds");
+  cacheLife("minutes");
 
   const [profile, supabase] = await Promise.all([getCurrentProfile(), createClient()]);
   const { data: accounts } = await supabase
@@ -48,7 +51,7 @@ export type { TransactionFilters } from "@/lib/wallet/transaction-query";
 export const getWalletTransactionsData = cache(async (filters: TransactionFilters = {}) => {
   "use cache: private";
   cacheTag(CACHE_TAGS.walletTransactions);
-  cacheLife("seconds");
+  cacheLife("minutes");
 
   const supabase = await createClient();
   return fetchTransactionPage(supabase, filters);
@@ -62,7 +65,7 @@ export const getWalletTransactionsData = cache(async (filters: TransactionFilter
 export const getWalletMonthTransactionsData = cache(async () => {
   "use cache: private";
   cacheTag(CACHE_TAGS.walletTransactions);
-  cacheLife("seconds");
+  cacheLife("minutes");
 
   const supabase = await createClient();
   const now = new Date();
@@ -79,7 +82,7 @@ export const getWalletMonthTransactionsData = cache(async () => {
 export const getRecurringTransactionsData = cache(async () => {
   "use cache: private";
   cacheTag(CACHE_TAGS.recurringTransactions);
-  cacheLife("seconds");
+  cacheLife("minutes");
 
   const supabase = await createClient();
   const { data } = await supabase

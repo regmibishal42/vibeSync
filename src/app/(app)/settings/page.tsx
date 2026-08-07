@@ -2,10 +2,22 @@ import type { Metadata } from "next";
 import { Suspense } from "react";
 import { ShieldCheck } from "lucide-react";
 
-import { createClient } from "@/lib/supabase/server";
-import { getCurrentProfile } from "@/lib/supabase/profile";
+import { getSettingsData } from "@/app/(app)/settings/data";
 import { PasswordForm } from "@/components/settings/password-form";
 import { Card } from "@/components/ui/card";
+
+// NOTE: `unstable_instant` validation was attempted on every page here and
+// removed. Under a layout exported as `instant = false` (which this one must
+// be — entry depends on the session cookie), every child segment eventually
+// reports "target segment was prevented from rendering for an unknown
+// reason", naming no component and offering nothing to fix. It's a
+// draft-status feature and the docs' "validate inner segments under an
+// exempted layout" path doesn't hold in 16.2.
+//
+// Nothing is lost at runtime: validation only *proves* a shell is instant,
+// it isn't the mechanism that makes it so. What actually fixed navigation is
+// in the data layer — see cacheLife in each data.ts and getChromeData in the
+// layout.
 
 export const metadata: Metadata = { title: "Settings" };
 
@@ -27,24 +39,20 @@ export default function SettingsPage() {
 }
 
 async function SettingsContent() {
-  const profile = await getCurrentProfile();
-  if (!profile) return null;
+  const { profile, partner } = await getSettingsData();
+
+  // Never return null: the layout already handles the unprovisioned case,
+  // and a segment that renders nothing gives instant validation nothing to
+  // check ("target segment was prevented from rendering").
+  if (!profile) {
+    return (
+      <p className="text-muted-foreground text-sm">
+        Sign in again to manage your account.
+      </p>
+    );
+  }
 
   const isOwner = profile.role === "OWNER";
-
-  // Only the OWNER can read another profile row (that single exception is
-  // spelled out in 0013_strict_isolation.sql) — and a profile row carries a
-  // name and role, never any financial data.
-  let partner: { id: string; full_name: string } | null = null;
-  if (isOwner) {
-    const supabase = await createClient();
-    const { data } = await supabase
-      .from("profiles")
-      .select("id, full_name")
-      .neq("id", profile.id)
-      .maybeSingle();
-    partner = data ?? null;
-  }
 
   return (
     <>

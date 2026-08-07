@@ -16,7 +16,7 @@ import { CACHE_TAGS } from "@/lib/cache-tags";
 export const getJobsData = cache(async () => {
   "use cache: private";
   cacheTag(CACHE_TAGS.workJobs);
-  cacheLife("seconds");
+  cacheLife("minutes");
 
   const [profile, supabase] = await Promise.all([getCurrentProfile(), createClient()]);
   const [{ data: jobs }, { data: shifts }, { data: salaries }, { data: accounts }] =
@@ -43,7 +43,7 @@ export const getJobsData = cache(async () => {
 export const getPayoutBatchesData = cache(async () => {
   "use cache: private";
   cacheTag(CACHE_TAGS.workPayoutBatches);
-  cacheLife("seconds");
+  cacheLife("minutes");
 
   const supabase = await createClient();
   const { data } = await supabase

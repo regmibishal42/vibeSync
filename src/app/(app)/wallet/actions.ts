@@ -9,6 +9,8 @@ import { insertSignedTransaction, transferLabels } from "@/lib/wallet/create-tra
 import { CACHE_TAGS } from "@/lib/cache-tags";
 import {
   fetchTransactionPage,
+  transactionCursorSchema,
+  transactionFiltersSchema,
   type TransactionCursor,
   type TransactionFilters,
   type TransactionPage,
@@ -249,6 +251,15 @@ export async function loadMoreTransactions(
     return { error: "Not signed in." };
   }
 
-  const page = await fetchTransactionPage(supabase, filters, cursor);
+  // These come straight off the wire — validate before they reach the query
+  // builder, where they'd otherwise be interpolated into filter strings.
+  const parsedFilters = transactionFiltersSchema.safeParse(filters ?? {});
+  const parsedCursor = transactionCursorSchema.safeParse(cursor);
+
+  if (!parsedFilters.success || !parsedCursor.success) {
+    return { error: "Invalid request." };
+  }
+
+  const page = await fetchTransactionPage(supabase, parsedFilters.data, parsedCursor.data);
   return { page };
 }

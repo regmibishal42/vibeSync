@@ -1,6 +1,5 @@
 import type { Metadata } from "next";
 import dynamic from "next/dynamic";
-import { Wallet, TrendingDown, TrendingUp } from "lucide-react";
 import { Suspense } from "react";
 
 import {
@@ -10,7 +9,6 @@ import {
   getRecurringTransactionsData,
   type TransactionFilters as TransactionFiltersType,
 } from "@/app/(app)/wallet/data";
-import { StatCard } from "@/components/dashboard/stat-card";
 import { StatGridSkeleton } from "@/components/skeletons/stat-grid-skeleton";
 import { ChartSkeleton } from "@/components/skeletons/chart-skeleton";
 import { ListSkeleton } from "@/components/skeletons/list-skeleton";
@@ -19,20 +17,21 @@ import { AccountForm } from "@/components/wallet/account-form";
 import { QuickAddButton } from "@/components/wallet/quick-add-button";
 import { TransferForm } from "@/components/wallet/transfer-form";
 import { TransactionFeed } from "@/components/wallet/transaction-feed";
+import { EmptyState } from "@/components/ui/empty-state";
+import { Wallet } from "lucide-react";
+import { MonthSummary } from "@/components/wallet/month-summary";
 import { TransactionFilters } from "@/components/wallet/transaction-filters";
 import { RecurringTransactionForm } from "@/components/wallet/recurring-transaction-form";
 import { RecurringTransactionList } from "@/components/wallet/recurring-transaction-list";
-import { CATEGORY_ORDER, CATEGORY_META } from "@/lib/wallet/categories";
-import { formatCurrency } from "@/lib/format";
+import { CATEGORY_ORDER } from "@/lib/wallet/categories";
 import type { ExpenseCategory } from "@/lib/types/database.types";
 
+// Validated at build time to produce an instant static shell on client
+// navigation. `runtime` rather than `static` because this route reads
+// searchParams (the transaction filters) — the sample below is the unfiltered
+// default, which is what a tab switch actually hits.
 const BalanceChart = dynamic(
   () => import("@/components/wallet/balance-chart").then((m) => m.BalanceChart),
-  { loading: () => <ChartSkeleton /> }
-);
-const CategorySpendChart = dynamic(
-  () =>
-    import("@/components/wallet/category-spend-chart").then((m) => m.CategorySpendChart),
   { loading: () => <ChartSkeleton /> }
 );
 
@@ -61,12 +60,6 @@ function positiveNumber(raw: string | undefined): number | undefined {
   if (!raw) return undefined;
   const n = Number(raw);
   return Number.isFinite(n) && n >= 0 ? n : undefined;
-}
-
-function isThisMonth(iso: string) {
-  const d = new Date(iso);
-  const now = new Date();
-  return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
 }
 
 export default function WalletPage({
@@ -121,43 +114,17 @@ async function WalletSummary() {
   // Parent accounts stay out of net worth / month in / month out: that money
   // is administered, not owned (they get their own section below).
   const ownAccountIds = new Set(myAccounts.map((a) => a.id));
-  // Unbounded-by-recency (unlike the 50-row "recent transactions" list) so
-  // month stats and the category chart below don't silently under-count
-  // once monthly volume exceeds 50.
+  // Fetched here (server, cached) but bucketed into "this month" on the
+  // client, against the viewer's own clock — see MonthSummary.
   const monthTransactions = await getWalletMonthTransactionsData();
-  const ownMonthTx = monthTransactions
-    .filter((t) => ownAccountIds.has(t.account_id))
-    .filter((t) => isThisMonth(t.transaction_date));
 
   const netWorth = myAccounts.reduce((sum, a) => sum + a.current_balance, 0);
-  const monthIncome = ownMonthTx
-    .filter((t) => t.amount > 0)
-    .reduce((sum, t) => sum + t.amount, 0);
-  const monthExpense = ownMonthTx
-    .filter((t) => t.amount < 0)
-    .reduce((sum, t) => sum + Math.abs(t.amount), 0);
 
+  // Balances are a snapshot, not a time window — safe to compute here.
   const chartData = accounts.map((a) => ({
     name: a.account_name,
     balance: a.current_balance,
   }));
-
-  // Magnitude comparison ("which category did we spend most on"), so a
-  // single-hue sorted bar chart is the right form here — same as
-  // BalanceChart above, not a pie/donut.
-  const categoryTotals = new Map<ExpenseCategory, number>();
-  ownMonthTx
-    .filter((t) => t.type === "EXPENSE" && t.category)
-    .forEach((t) => {
-      const category = t.category as ExpenseCategory;
-      categoryTotals.set(category, (categoryTotals.get(category) ?? 0) + Math.abs(t.amount));
-    });
-  const categoryChartData = CATEGORY_ORDER.map((c) => ({
-    label: CATEGORY_META[c].label,
-    amount: categoryTotals.get(c) ?? 0,
-  }))
-    .filter((d) => d.amount > 0)
-    .sort((a, b) => b.amount - a.amount);
 
   const quickAddAccounts = myAccounts.map((a) => ({
     id: a.id,
@@ -168,26 +135,12 @@ async function WalletSummary() {
 
   return (
     <>
-      <div className="grid grid-cols-3 gap-3">
-        <StatCard
-          label="Net worth"
-          value={formatCurrency(netWorth, currency)}
-          icon={<Wallet className="size-4" />}
-          accent="finance"
-        />
-        <StatCard
-          label="Month in"
-          value={formatCurrency(monthIncome, currency)}
-          icon={<TrendingUp className="size-4" />}
-          accent="finance"
-        />
-        <StatCard
-          label="Month out"
-          value={formatCurrency(monthExpense, currency)}
-          icon={<TrendingDown className="size-4" />}
-          accent="warning"
-        />
-      </div>
+      <MonthSummary
+        netWorth={netWorth}
+        transactions={monthTransactions}
+        accountIds={[...ownAccountIds]}
+        currency={currency}
+      />
 
       {accounts.length > 0 ? (
         <div className="border-border/60 bg-card rounded-xl border p-4">
@@ -196,18 +149,23 @@ async function WalletSummary() {
         </div>
       ) : null}
 
-      {categoryChartData.length > 0 ? (
-        <div className="border-border/60 bg-card rounded-xl border p-4">
-          <h2 className="mb-3 text-sm font-medium">Spending by category</h2>
-          <CategorySpendChart data={categoryChartData} />
-        </div>
-      ) : null}
 
-      <div className="flex gap-2">
-        <QuickAddButton accounts={quickAddAccounts} currency={currency} />
-        <TransferForm accounts={myAccounts} />
-        <AccountForm isOwner={isOwner} />
-      </div>
+      {accounts.length === 0 ? (
+        <EmptyState
+          icon={Wallet}
+          accent="finance"
+          title="Add your first account"
+          description="A bank account, a digital wallet, or cash in your pocket. Everything else — expenses, transfers, loans — hangs off one of these."
+          hint="You can add as many as you like, and move money between them later."
+          action={<AccountForm isOwner={isOwner} />}
+        />
+      ) : (
+        <div className="flex gap-2">
+          <QuickAddButton accounts={quickAddAccounts} currency={currency} />
+          <TransferForm accounts={myAccounts} />
+          <AccountForm isOwner={isOwner} />
+        </div>
+      )}
 
       {myAccounts.length > 0 ? (
         <section className="flex flex-col gap-3">

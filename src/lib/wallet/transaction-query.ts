@@ -1,6 +1,8 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { z } from "zod";
 
 import { escapeLikePattern } from "@/lib/wallet/search";
+import { CATEGORY_ORDER } from "@/lib/wallet/categories";
 import type {
   Database,
   ExpenseCategory,
@@ -32,6 +34,40 @@ export type TransactionPage = {
 };
 
 export const TRANSACTIONS_PAGE_SIZE = 25;
+
+// Server Action arguments arrive from the client and TypeScript types are
+// erased at runtime, so `filters` and `cursor` are attacker-controlled. Both
+// end up inside `.or(...)` filter strings below, which are assembled by
+// string interpolation — unvalidated, a crafted cursor could break out of the
+// intended predicate and reshape the query. RLS still confines every row to
+// the signed-in user, so this was never cross-user exposure, but the query
+// itself has to be trustworthy. Anything that doesn't parse is dropped.
+const TRANSACTION_TYPES = [
+  "EXPENSE",
+  "DEPOSIT",
+  "TRANSFER",
+  "LOAN",
+  "REPAYMENT",
+] as const;
+
+const isoDate = z.string().max(40).regex(/^[0-9T:.+\-Z ]+$/);
+
+export const transactionFiltersSchema = z
+  .object({
+    category: z.enum(CATEGORY_ORDER as [ExpenseCategory, ...ExpenseCategory[]]).optional(),
+    type: z.enum(TRANSACTION_TYPES).optional(),
+    accountId: z.string().uuid().optional(),
+    from: isoDate.optional(),
+    to: isoDate.optional(),
+    q: z.string().max(200).optional(),
+    min: z.number().finite().nonnegative().optional(),
+    max: z.number().finite().nonnegative().optional(),
+  })
+  .strict();
+
+export const transactionCursorSchema = z
+  .object({ date: isoDate, id: z.string().uuid() })
+  .strict();
 
 export function hasActiveFilters(f: TransactionFilters): boolean {
   return Boolean(
@@ -71,11 +107,16 @@ export async function fetchTransactionPage(
   }
   // Amount filters read as magnitudes — "over 500" should mean a 500 expense
   // as readily as a 500 deposit, and the ledger stores expenses negative.
+  // Number(...) rather than the raw value: these land in an interpolated
+  // filter string, so they must be provably numeric even if a caller skipped
+  // the schema above.
   if (filters.min !== undefined) {
-    query = query.or(`amount.gte.${filters.min},amount.lte.${-filters.min}`);
+    const min = Number(filters.min);
+    if (Number.isFinite(min)) query = query.or(`amount.gte.${min},amount.lte.${-min}`);
   }
   if (filters.max !== undefined) {
-    query = query.gte("amount", -filters.max).lte("amount", filters.max);
+    const max = Number(filters.max);
+    if (Number.isFinite(max)) query = query.gte("amount", -max).lte("amount", max);
   }
 
   if (cursor) {

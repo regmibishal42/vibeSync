@@ -11,6 +11,19 @@ import { LoanCard, LoanEmptyState } from "@/components/loans/loan-card";
 import { CounterpartySummary } from "@/components/loans/counterparty-summary";
 import { formatCurrency } from "@/lib/format";
 
+// NOTE: `unstable_instant` validation was attempted on every page here and
+// removed. Under a layout exported as `instant = false` (which this one must
+// be — entry depends on the session cookie), every child segment eventually
+// reports "target segment was prevented from rendering for an unknown
+// reason", naming no component and offering nothing to fix. It's a
+// draft-status feature and the docs' "validate inner segments under an
+// exempted layout" path doesn't hold in 16.2.
+//
+// Nothing is lost at runtime: validation only *proves* a shell is instant,
+// it isn't the mechanism that makes it so. What actually fixed navigation is
+// in the data layer — see cacheLife in each data.ts and getChromeData in the
+// layout.
+
 export const metadata: Metadata = { title: "Loans" };
 
 export default function LoansPage() {

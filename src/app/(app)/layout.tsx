@@ -1,4 +1,5 @@
 import { Suspense } from "react";
+import { cacheLife, cacheTag } from "next/cache";
 
 import { signOut } from "@/app/(app)/actions";
 import { AppHeader } from "@/components/nav/app-header";
@@ -7,13 +8,15 @@ import { FabQuickLog } from "@/components/nav/fab-quick-log";
 import { Button } from "@/components/ui/button";
 import { AppShellSkeleton } from "@/components/skeletons/app-shell-skeleton";
 import { TransactionsProvider } from "@/components/wallet/transactions-provider";
-import { getCurrentProfile, getCurrentUser } from "@/lib/supabase/profile";
+import { getCurrentProfile } from "@/lib/supabase/profile";
 import { createClient } from "@/lib/supabase/server";
+import { CACHE_TAGS } from "@/lib/cache-tags";
 
-// This shell is permanently, legitimately dynamic — financial/session data
-// can never be prefetched or shown stale across users — so it's exempted
-// from Cache Components' instant-navigation static-shell validation rather
-// than fighting an unfixable warning on every request.
+// Entry *into* the app shell can't be instant — it depends on the session
+// cookie, which is unknowable at build time. Per Next's instant-navigation
+// guide this is exactly what `instant = false` on a layout is for: it exempts
+// first entry while still allowing each page underneath to be validated for
+// instant sibling navigation (see `unstable_instant` in every page.tsx).
 export const unstable_instant = false;
 
 export default function AppShellLayout({
@@ -21,10 +24,6 @@ export default function AppShellLayout({
 }: {
   children: React.ReactNode;
 }) {
-  // Next's client-side navigation only re-renders below this shared layout,
-  // so this Suspense boundary only ever engages on a genuine first/hard
-  // load — header/nav never re-flash or re-fetch when tab-switching between
-  // the 4 routes.
   return (
     <div className="mx-auto flex min-h-svh w-full max-w-lg flex-col">
       <Suspense fallback={<AppShellSkeleton />}>
@@ -34,23 +33,51 @@ export default function AppShellLayout({
   );
 }
 
-async function AppChrome({ children }: { children: React.ReactNode }) {
+// Header/nav/FAB data, behind one cached fetcher instead of two ad-hoc
+// queries inline.
+//
+// Honest scope: `'use cache: private'` is browser-memory only, so this does
+// not reduce server work on a page load — the queries still run per request.
+// What it buys is reuse across client navigations within a session, plus a
+// single named place to tag (so adding an account refreshes the FAB picker).
+//
+// Tagged with walletAccounts so adding or renaming an account refreshes the
+// FAB's picker immediately, and profiles so a currency change lands.
+async function getChromeData() {
+  "use cache: private";
+  cacheTag(CACHE_TAGS.walletAccounts, CACHE_TAGS.profile);
+  cacheLife("minutes");
+
   const profile = await getCurrentProfile();
+  if (!profile) return { profile: null, accounts: [] };
+
+  const supabase = await createClient();
+  const { data: accounts } = await supabase
+    .from("accounts")
+    .select("id, user_id, account_name, account_type")
+    .order("account_name");
+
+  return { profile, accounts: accounts ?? [] };
+}
+
+async function AppChrome({ children }: { children: React.ReactNode }) {
+  const { profile, accounts } = await getChromeData();
 
   // Proxy guarantees a session exists here — a missing profile means the two
   // seed accounts haven't been provisioned yet (see scripts/seed.ts), not a
   // normal unauthenticated visitor. A plain redirect("/login") would bounce
   // right back here: proxy.ts sends any authenticated session away from
   // /login and back to "/", which loops forever since the profile is still
-  // missing. Since Server Components cannot clear cookies (and thus signing out
-  // here fails), we render an unprovisioned state with a Server Action sign out
-  // button to avoid an infinite redirect loop.
+  // missing. Since Server Components cannot clear cookies (and thus signing
+  // out here fails), we render an unprovisioned state with a Server Action
+  // sign-out button to avoid an infinite redirect loop.
   if (!profile) {
     return (
       <div className="flex min-h-svh flex-col items-center justify-center p-4 text-center">
         <h1 className="text-xl font-bold">Account not provisioned</h1>
         <p className="text-muted-foreground mt-2 mb-6 max-w-sm">
-          Your account exists but hasn&apos;t been set up with a profile yet. Please run the seed script or contact your administrator.
+          Your account exists but hasn&apos;t been set up with a profile yet.
+          Please run the seed script or contact your administrator.
         </p>
         <form action={signOut}>
           <Button type="submit">Sign Out</Button>
@@ -59,18 +86,11 @@ async function AppChrome({ children }: { children: React.ReactNode }) {
     );
   }
 
-  const [user, supabase] = await Promise.all([getCurrentUser(), createClient()]);
-  const { data: accounts } = await supabase
-    .from("accounts")
-    .select("id, user_id, account_name, account_type")
-    .eq("user_id", user?.id ?? "")
-    .order("account_name");
-
   return (
     <TransactionsProvider>
       <AppHeader fullName={profile.full_name} role={profile.role} />
-      <main className="flex-1 px-4 pb-28 pt-4">{children}</main>
-      <FabQuickLog accounts={accounts ?? []} currency={profile.currency_preference} />
+      <main className="flex-1 px-4 pt-4 pb-28">{children}</main>
+      <FabQuickLog accounts={accounts} currency={profile.currency_preference} />
       <BottomNav />
     </TransactionsProvider>
   );

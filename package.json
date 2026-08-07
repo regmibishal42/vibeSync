@@ -13,7 +13,8 @@
     "lint": "eslint",
     "seed": "tsx scripts/seed.ts",
     "generate:icons": "tsx scripts/generate-icons.ts",
-    "check": "tsx scripts/selfcheck.ts"
+    "check": "tsx scripts/selfcheck.ts",
+    "e2e": "playwright test"
   },
   "dependencies": {
     "@radix-ui/react-avatar": "^1.2.3",
@@ -43,6 +44,7 @@
     "zod": "^4.4.3"
   },
   "devDependencies": {
+    "@playwright/test": "^1.62.1",
     "@tailwindcss/postcss": "^4",
     "@types/node": "^20",
     "@types/react": "^19",

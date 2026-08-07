@@ -2,6 +2,7 @@ import { HandCoins } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
+import { EmptyState } from "@/components/ui/empty-state";
 import { RepayForm } from "@/components/loans/repay-form";
 import { formatCurrency, todayLocalISO } from "@/lib/format";
 import type { AccountType, Database } from "@/lib/types/database.types";
@@ -85,11 +86,12 @@ export function LoanCard({
 
 export function LoanEmptyState() {
   return (
-    <Card className="items-center justify-center py-10 text-center">
-      <HandCoins className="text-muted-foreground mx-auto size-8" />
-      <p className="text-muted-foreground px-4 text-sm">
-        Nothing lent or borrowed yet.
-      </p>
-    </Card>
+    <EmptyState
+      icon={HandCoins}
+      accent="shift"
+      title="Nothing lent or borrowed"
+      description="Track money you lend to friends and money you borrow, so you always know who owes who."
+      hint="Repayments can land in a different account than the loan came from — lend from the bank, get paid back in cash."
+    />
   );
 }

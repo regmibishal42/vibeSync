@@ -15,7 +15,7 @@ import { CACHE_TAGS } from "@/lib/cache-tags";
 export const getLoansData = cache(async () => {
   "use cache: private";
   cacheTag(CACHE_TAGS.loans);
-  cacheLife("seconds");
+  cacheLife("minutes");
 
   const [profile, supabase] = await Promise.all([getCurrentProfile(), createClient()]);
   const [{ data: loans }, { data: repayments }, { data: balances }, { data: accounts }] =

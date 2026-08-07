@@ -11,6 +11,22 @@ const nextConfig: NextConfig = {
   // unstable_instant below).
   cacheComponents: true,
   experimental: {
+    // THE fix for "switching tabs refetches everything". `staleTimes.dynamic`
+    // defaults to 0 in Next 15+ — "not cached" — and every route here is
+    // Partial Prerender, so its dynamic half was never reused by the router.
+    // Measured before this: returning to 4 already-visited tabs cost 4 RSC
+    // fetches, one per tab, every time. See e2e/navigation.spec.ts, which
+    // exists to keep it that way.
+    //
+    // 5 minutes is safe here specifically because a write on *this* device
+    // clears the whole client cache immediately (every mutation calls
+    // updateTag). The only staleness left is a change made on another device
+    // — and since 0013 each account sees only its own data, that means the
+    // same person on a second device, which is rare and self-correcting.
+    staleTimes: {
+      dynamic: 300,
+      static: 300,
+    },
     // Dev-only DevTools panel for inspecting the static-shell/streaming
     // boundaries built during the Suspense refactor.
     instantNavigationDevToolsToggle: true,

@@ -10,21 +10,21 @@ import { StatGridSkeleton } from "@/components/skeletons/stat-grid-skeleton";
 import { ChartSkeleton } from "@/components/skeletons/chart-skeleton";
 import { ListSkeleton } from "@/components/skeletons/list-skeleton";
 import { JobForm } from "@/components/work/job-form";
+import { EmptyState } from "@/components/ui/empty-state";
+import { HoursThisMonth } from "@/components/work/hours-this-month";
 import { JobCard } from "@/components/work/job-card";
 import { PayoutBatchList } from "@/components/work/payout-batch-list";
 
+// Validated at build time to produce an instant shell on client navigation.
+// `runtime` rather than `static`: the (app) layout is `instant = false`
+// (entry depends on the session cookie), and a `static` child under an
+// exempted layout has no shell to attach to — validation rejects it outright.
 const EarningsChart = dynamic(
   () => import("@/components/work/earnings-chart").then((m) => m.EarningsChart),
   { loading: () => <ChartSkeleton /> }
 );
 
 export const metadata: Metadata = { title: "Work" };
-
-function isThisMonth(dateISO: string) {
-  const d = new Date(`${dateISO}T00:00:00`);
-  const now = new Date();
-  return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
-}
 
 export default function WorkPage() {
   return (
@@ -43,27 +43,9 @@ async function WorkSummary() {
   const currency = profile?.currency_preference ?? "AUD";
 
   const hourlyJobs = jobs.filter((j) => j.pay_type === "HOURLY");
-  const monthShifts = shifts.filter((s) => isThisMonth(s.shift_date));
-  const hoursThisMonth = monthShifts.reduce((sum, s) => sum + s.hours_worked, 0);
   const pendingPayout = shifts
     .filter((s) => s.payout_status === "PENDING")
     .reduce((sum, s) => sum + s.calculated_pay, 0);
-
-  const days = Array.from({ length: 14 }, (_, i) => {
-    const d = new Date();
-    d.setDate(d.getDate() - (13 - i));
-    return d.toISOString().slice(0, 10);
-  });
-
-  const chartData = days.map((dateISO) => ({
-    date: new Date(`${dateISO}T00:00:00`).toLocaleDateString(undefined, {
-      month: "numeric",
-      day: "numeric",
-    }),
-    pay: shifts
-      .filter((s) => s.shift_date === dateISO)
-      .reduce((sum, s) => sum + s.calculated_pay, 0),
-  }));
 
   const salariesByJob = new Map(salaries.filter((s) => s.job_id).map((s) => [s.job_id!, s]));
   const shiftsByJob = new Map<string, typeof shifts>();
@@ -82,7 +64,7 @@ async function WorkSummary() {
         />
         <StatCard
           label="Hours this month"
-          value={hoursThisMonth.toFixed(1)}
+          value={<HoursThisMonth shifts={shifts} />}
           icon={<Clock className="size-4" />}
           accent="shift"
         />
@@ -97,20 +79,26 @@ async function WorkSummary() {
       {hourlyJobs.length > 0 ? (
         <div className="border-border/60 bg-card rounded-xl border p-4">
           <h2 className="mb-2 text-sm font-medium">Last 14 days</h2>
-          <EarningsChart data={chartData} />
+          <EarningsChart shifts={shifts} />
         </div>
       ) : null}
 
-      <div className="flex items-center justify-between">
-        <h2 className="text-lg font-semibold">Jobs</h2>
-        <JobForm accounts={accounts} />
-      </div>
+      {jobs.length > 0 ? (
+        <div className="flex items-center justify-between">
+          <h2 className="text-lg font-semibold">Jobs</h2>
+          <JobForm accounts={accounts} />
+        </div>
+      ) : null}
 
       {jobs.length === 0 ? (
-        <p className="text-muted-foreground text-sm">
-          No jobs yet — add a full-time, part-time, hourly, or salaried job to
-          start tracking income.
-        </p>
+        <EmptyState
+          icon={Briefcase}
+          accent="shift"
+          title="No jobs yet"
+          description="Add where your money comes from — full-time or part-time, paid hourly or on a salary."
+          hint="Hourly jobs track shifts and settle into payouts. Salaried jobs post automatically on payday."
+          action={<JobForm accounts={accounts} />}
+        />
       ) : (
         <div className="flex flex-col gap-3">
           {jobs.map((job) => (
